@@ -26,7 +26,7 @@ WEBHOOK_RESOLVER = st.secrets.get(
 # NOVA URL DO SHAREPOINT AJUSTADA COM PARÂMETRO DE DOWNLOAD
 EXCEL_READ_URL = st.secrets.get(
     "EXCEL_READ_URL", 
-    "https://mustad365.sharepoint.com/:x:/s/LATAM/MBL/IQAPSTMSVrHsQLv4AQ3Yzxq8AQaT4uj9nirde2JN9qh2glE?e=ivimwu&download=1"
+    "https://mustad365.sharepoint.com/:x:/s/LATAM/MBL/IQAPSTMSVrHsQLv4AQ3Yzxq8AQaT4uj9nirde2JN9qh2glE?e=PVTzJM"
 )
 
 CATEGORIAS = {
