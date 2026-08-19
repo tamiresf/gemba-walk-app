@@ -12,10 +12,23 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
-# --- CARREGAR URLs DOS WEBHOOKS DOS SECRETS ---
-WEBHOOK_CRIAR = st.secrets.get("POWER_AUTOMATE_CRIAR_URL", "https://defaultcd14821755e24b4e86f837f80bf5ae.f3.environment.api.powerplatform.com:443/powerautomate/automations/direct/cu/06/workflows/a1df9787e2b94d19ab5643e165491bc8/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=yLF9HKRO6XtG75qHGA_U7X1g-NMCcnT4QHGXPdUkiFA")
-WEBHOOK_RESOLVER = st.secrets.get("POWER_AUTOMATE_RESOLVER_URL", "https://defaultcd14821755e24b4e86f837f80bf5ae.f3.environment.api.powerplatform.com:443/powerautomate/automations/direct/cu/08/workflows/24e560b839864d9b91720231dbb6584e/triggers/manual/paths/invoke?api-version=1")
-EXCEL_READ_URL = st.secrets.get("EXCEL_READ_URL", "https://mustad365-my.sharepoint.com/:x:/g/personal/tamires_santos_mustad_com/IQA3ok4bdtHdTZJmv3peAXnDAWwLIWJPfODXehQOxxdKAYY?e=T3wWP9?download=1")
+# --- CARREGAR URLs DOS SECRETS (URLs Corrigidas) ---
+WEBHOOK_CRIAR = st.secrets.get(
+    "POWER_AUTOMATE_CRIAR_URL", 
+    "https://defaultcd14821755e24b4e86f837f80bf5ae.f3.environment.api.powerplatform.com:443/powerautomate/automations/direct/cu/06/workflows/a1df9787e2b94d19ab5643e165491bc8/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=yLF9HKRO6XtG75qHGA_U7X1g-NMCcnT4QHGXPdUkiFA"
+)
+
+# ATENÇÃO: Garanta que esta URL tenha a assinatura (&sig=...) igual à de criação
+WEBHOOK_RESOLVER = st.secrets.get(
+    "POWER_AUTOMATE_RESOLVER_URL", 
+    "https://defaultcd14821755e24b4e86f837f80bf5ae.f3.environment.api.powerplatform.com:443/powerautomate/automations/direct/cu/08/workflows/24e560b839864d9b91720231dbb6584e/triggers/manual/paths/invoke?api-version=1"
+)
+
+# CORREÇÃO: Substituído o segundo '?' por '&download=1'
+EXCEL_READ_URL = st.secrets.get(
+    "EXCEL_READ_URL", 
+    "https://mustad365-my.sharepoint.com/:x:/g/personal/tamires_santos_mustad_com/IQA3ok4bdtHdTZJmv3peAXnDAWwLIWJPfODXehQOxxdKAYY?e=T3wWP9&download=1"
+)
 
 CATEGORIAS = {
     "Segurança": "EPIs, máquinas, proteções, riscos, circulação",
@@ -30,13 +43,16 @@ CATEGORIAS = {
 }
 
 # --- FUNÇÃO PARA CARREGAR DADOS DO SHAREPOINT ---
-@st.cache_data(ttl=10)
+@st.cache_data(ttl=5)
 def carregar_dados():
     if EXCEL_READ_URL:
         try:
             df = pd.read_excel(EXCEL_READ_URL)
+            # Remove espaços em branco dos nomes das colunas
+            df.columns = df.columns.str.strip().str.lower()
             return df
-        except Exception:
+        except Exception as e:
+            st.error(f"Erro ao ler a planilha Excel: {e}")
             return pd.DataFrame()
     return pd.DataFrame()
 
@@ -76,22 +92,21 @@ with aba1:
                 if not auditor or not estacao or not problema or not responsavel_email:
                     st.error("Preencha todos os campos obrigatórios (*).")
                 else:
-                    # Gera um ID único para cada registro
                     id_unico = str(uuid.uuid4())[:8]
                     
                     payload = {
-                        "id": id_unico,
-                        "auditor": auditor,
+                        "id": str(id_unico),
+                        "auditor": str(auditor),
                         "data_criacao": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                        "estacao": estacao,
-                        "categoria": categoria_sel,
-                        "problema": problema,
-                        "local": local,
-                        "impacto": impacto,
-                        "causa": causa,
-                        "acao_imediata": acao_imediata,
-                        "responsavel": responsavel_email,
-                        "prazo": str(prazo),
+                        "estacao": str(estacao),
+                        "categoria": str(categoria_sel),
+                        "problema": str(problema),
+                        "local": str(local),
+                        "impacto": str(impacto),
+                        "causa": str(causa),
+                        "acao_imediata": str(acao_imediata),
+                        "responsavel": str(responsavel_email),
+                        "prazo": prazo.strftime("%Y-%m-%d"),
                         "status": "Pendente",
                         "data_solucao": ""
                     }
@@ -102,7 +117,7 @@ with aba1:
                             st.success("Não conformidade salva com sucesso no Excel do SharePoint!")
                             st.cache_data.clear()
                         else:
-                            st.error(f"Erro ao salvar: {res.status_code}")
+                            st.error(f"Erro no Power Automate (Código {res.status_code}): {res.text}")
                     except Exception as e:
                         st.error(f"Falha de conexão com o Power Automate: {e}")
     else:
@@ -117,7 +132,7 @@ with aba2:
     if df_dados.empty or "status" not in df_dados.columns:
         st.info("Nenhuma pendência encontrada ou aguardando sincronização com a planilha.")
     else:
-        pendentes = df_dados[df_dados["status"] == "Pendente"]
+        pendentes = df_dados[df_dados["status"].astype(str).str.strip().str.capitalize() == "Pendente"]
         
         if pendentes.empty:
             st.success("🎉 Nenhuma pendência aberta no momento!")
@@ -148,7 +163,7 @@ with aba2:
                                     st.cache_data.clear()
                                     st.rerun()
                                 else:
-                                    st.error("Erro ao atualizar status.")
+                                    st.error(f"Erro ao atualizar status: {res_sol.status_code}")
                             except Exception as e:
                                 st.error(f"Falha de conexão: {e}")
 
@@ -160,12 +175,13 @@ with aba3:
     if not df_dados.empty and "status" in df_dados.columns:
         c1, c2, c3 = st.columns(3)
         c1.metric("Total de Registros", len(df_dados))
-        c2.metric("Pendentes", len(df_dados[df_dados['status'] == 'Pendente']))
-        c3.metric("Resolvidos", len(df_dados[df_dados['status'] == 'Resolvido']))
+        c2.metric("Pendentes", len(df_dados[df_dados['status'].astype(str).str.strip().str.capitalize() == 'Pendente']))
+        c3.metric("Resolvidos", len(df_dados[df_dados['status'].astype(str).str.strip().str.capitalize() == 'Resolvido']))
         
         st.divider()
         st.markdown("**Problemas Encontrados por Categoria**")
-        st.bar_chart(df_dados['categoria'].value_counts())
+        if 'categoria' in df_dados.columns:
+            st.bar_chart(df_dados['categoria'].value_counts())
         
         st.subheader("📋 Tabela Geral de Dados")
         st.dataframe(df_dados)
