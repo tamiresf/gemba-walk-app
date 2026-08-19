@@ -13,9 +13,9 @@ st.set_page_config(
 )
 
 # --- CARREGAR URLs DOS WEBHOOKS DOS SECRETS ---
-WEBHOOK_CRIAR = st.secrets.get("POWER_AUTOMATE_CRIAR_URL", "")
-WEBHOOK_RESOLVER = st.secrets.get("POWER_AUTOMATE_RESOLVER_URL", "")
-EXCEL_READ_URL = st.secrets.get("EXCEL_READ_URL", "")
+WEBHOOK_CRIAR = st.secrets.get("POWER_AUTOMATE_CRIAR_URL", "https://defaultcd14821755e24b4e86f837f80bf5ae.f3.environment.api.powerplatform.com:443/powerautomate/automations/direct/cu/06/workflows/a1df9787e2b94d19ab5643e165491bc8/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=yLF9HKRO6XtG75qHGA_U7X1g-NMCcnT4QHGXPdUkiFA")
+WEBHOOK_RESOLVER = st.secrets.get("POWER_AUTOMATE_RESOLVER_URL", "https://defaultcd14821755e24b4e86f837f80bf5ae.f3.environment.api.powerplatform.com:443/powerautomate/automations/direct/cu/08/workflows/24e560b839864d9b91720231dbb6584e/triggers/manual/paths/invoke?api-version=1")
+EXCEL_READ_URL = st.secrets.get("EXCEL_READ_URL", "https://mustad365-my.sharepoint.com/:x:/g/personal/tamires_santos_mustad_com/IQA3ok4bdtHdTZJmv3peAXnDAWwLIWJPfODXehQOxxdKAYY?e=T3wWP9?download=1")
 
 CATEGORIAS = {
     "Segurança": "EPIs, máquinas, proteções, riscos, circulação",
