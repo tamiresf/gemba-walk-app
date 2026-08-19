@@ -12,7 +12,7 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
-# --- CARREGAR URLs DOS SECRETS (ATUALIZADAS E CORRIGIDAS) ---
+# --- CARREGAR URLs DOS SECRETS (URLs Corrigidas) ---
 WEBHOOK_CRIAR = st.secrets.get(
     "POWER_AUTOMATE_CRIAR_URL", 
     "https://defaultcd14821755e24b4e86f837f80bf5ae.f3.environment.api.powerplatform.com:443/powerautomate/automations/direct/cu/08/workflows/24e560b839864d9b91720231dbb6584e/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=cZEo_aNlKwbk9kP84Yu_OITxnl6wZqrM-RCGjOZXzss"
@@ -23,9 +23,10 @@ WEBHOOK_RESOLVER = st.secrets.get(
     "https://defaultcd14821755e24b4e86f837f80bf5ae.f3.environment.api.powerplatform.com:443/powerautomate/automations/direct/cu/06/workflows/a1df9787e2b94d19ab5643e165491bc8/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=yLF9HKRO6XtG75qHGA_U7X1g-NMCcnT4QHGXPdUkiFA"
 )
 
+# NOVA URL DO SHAREPOINT AJUSTADA COM PARÂMETRO DE DOWNLOAD
 EXCEL_READ_URL = st.secrets.get(
     "EXCEL_READ_URL", 
-    "https://mustad365-my.sharepoint.com/:x:/g/personal/tamires_santos_mustad_com/IQA3ok4bdtHdTZJmv3peAXnDAWwLIWJPfODXehQOxxdKAYY?e=T3wWP9&download=1"
+    "https://mustad365.sharepoint.com/:x:/s/LATAM/MBL/IQAPSTMSVrHsQLv4AQ3Yzxq8AQaT4uj9nirde2JN9qh2glE?e=ivimwu&download=1"
 )
 
 CATEGORIAS = {
