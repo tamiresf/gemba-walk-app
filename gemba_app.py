@@ -43,7 +43,7 @@ CATEGORIAS = {
 
 
 # --- 4. FUNÇÃO PARA CARREGAR DADOS E E-MAILS DO POWER AUTOMATE ---
-@st.cache_data(ttl=5)
+@st.cache_data(ttl=60, show_spinner=False)
 def carregar_dados_e_usuarios():
     try:
         res = requests.get(WEBHOOK_LER, timeout=10)
