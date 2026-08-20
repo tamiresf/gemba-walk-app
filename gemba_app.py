@@ -194,7 +194,5 @@ with aba3:
         if 'categoria' in df_dados.columns:
             st.bar_chart(df_dados['categoria'].value_counts())
         
-        st.subheader("📋 Tabela Geral de Dados")
-        st.dataframe(df_dados)
     else:
         st.info("Aguardando registros para exibir indicadores.")
