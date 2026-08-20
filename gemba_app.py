@@ -17,7 +17,33 @@ WEBHOOK_CRIAR = st.secrets.get("POWER_AUTOMATE_CRIAR_URL", "")
 WEBHOOK_RESOLVER = st.secrets.get("POWER_AUTOMATE_RESOLVER_URL", "")
 WEBHOOK_LER = st.secrets.get("POWER_AUTOMATE_LER_URL", "")
 
-# --- 3. CATEGORIAS DA INSPEÇÃO ---
+# --- 3. LISTA FIXA DE E-MAILS (COM AUTOCOMPLETE) ---
+EMAILS_CORPORATIVOS = sorted(
+    list(
+        set([
+            "jaqueline.silva@mustad.com",
+            "geovane.valdevino@mustad.com",
+            "gissele.nogueira@mustad.com",
+            "yuri.fernandes@mustad.com",
+            "felipe.possato@mustad.com",
+            "henrique.borges@mustad.com",
+            "jessica.brandao@mustad.com",
+            "helen.esteves@mustad.com",
+            "giovane.carvalho@mustad.com",
+            "nelcir.junior@mustad.com",
+            "hebert.murtha@mustad.com",
+            "maicon.alves@mustad.com",
+            "victor.cavadas@mustad.com",
+            "william.sousa@mustad.com",
+            "felipe.muniz@mustad.com",
+            "tamires.santos@mustad.com",
+            "eduardo.francisco@mustad.com",
+        ])
+    )
+)
+OPCOES_EMAILS = [""] + EMAILS_CORPORATIVOS
+
+# --- 4. CATEGORIAS DA INSPEÇÃO ---
 CATEGORIAS = {
     "Segurança": "EPIs, máquinas, proteções, riscos, circulação",
     "Qualidade": "Dimensões, formato, acabamento, defeitos",
@@ -31,7 +57,7 @@ CATEGORIAS = {
 }
 
 
-# --- 4. FUNÇÃO PARA CARREGAR DADOS DO POWER AUTOMATE ---
+# --- 5. FUNÇÃO PARA CARREGAR DADOS DO POWER AUTOMATE ---
 @st.cache_data(ttl=5, show_spinner=False)
 def carregar_dados():
     try:
@@ -76,7 +102,7 @@ with st.sidebar.expander("🛠️ Diagnóstico do Sistema"):
     if not df_dados.empty:
         st.write("**Colunas disponíveis:**", list(df_dados.columns))
 
-# --- 5. INTERFACE PRINCIPAL ---
+# --- 6. INTERFACE PRINCIPAL ---
 st.title("🔍 Gemba Walk Digital")
 aba1, aba2, aba3 = st.tabs(
     ["📋 Novo Registro", "📌 Quadro de Post-its", "📊 Dashboard"]
@@ -109,7 +135,14 @@ with aba1:
             impacto = st.text_area("Qual o impacto?")
             causa = st.text_area("Causa aparente?")
             acao_imediata = st.text_area("Ação imediata?")
-            responsavel_email = st.text_input("E-mail do Responsável*")
+
+            # Campo com busca por inicial (Autocomplete)
+            responsavel_email = st.selectbox(
+                "E-mail do Responsável*",
+                options=OPCOES_EMAILS,
+                help="Digite as primeiras letras do e-mail para filtrar a lista.",
+            )
+
             prazo = st.date_input("Prazo para Solução", value=date.today())
 
             submitted = st.form_submit_button("Salvar Não Conformidade")
