@@ -23,6 +23,11 @@ WEBHOOK_RESOLVER = st.secrets.get(
     "https://defaultcd14821755e24b4e86f837f80bf5ae.f3.environment.api.powerplatform.com:443/powerautomate/automations/direct/cu/06/workflows/a1df9787e2b94d19ab5643e165491bc8/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=yLF9HKRO6XtG75qHGA_U7X1g-NMCcnT4QHGXPdUkiFA",
 )
 
+WEBHOOK_LER = st.secrets.get(
+    "POWER_AUTOMATE_LER_URL",
+    "https://defaultcd14821755e24b4e86f837f80bf5ae.f3.environment.api.powerplatform.com:443/powerautomate/automations/direct/cu/27/workflows/62a264c57b214336aa6205ae2fb47c59/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=JJ2EZPMarOKgpxHQNzHh0ZR7N5LKtQ53eEO1wB-eePM",
+)
+
 # --- 3. LISTA DE E-MAILS CORPORATIVOS (FIXO NO CÓDIGO) ---
 EMAILS_BRUTOS = [
     "jaqueline.silva@mustad.com",
@@ -43,7 +48,6 @@ EMAILS_BRUTOS = [
     "tamires.santos@mustad.com",
 ]
 
-# Remover possíveis duplicados e ordenar alfabeticamente
 LISTA_EMAILS_CORPORATIVOS = sorted(
     list(set(e.strip().lower() for e in EMAILS_BRUTOS))
 )
@@ -62,13 +66,44 @@ CATEGORIAS = {
     "Meio ambiente": "Resíduos, sucata, descarte, organização",
 }
 
-# Inicializa a base local no session_state caso ainda não exista
-if "df_dados" not in st.session_state:
-    st.session_state["df_dados"] = pd.DataFrame()
+
+# --- 5. FUNÇÃO PARA CARREGAR REGISTROS DO MICROSOFT LISTS ---
+@st.cache_data(ttl=15, show_spinner=False)
+def carregar_dados_lists():
+    try:
+        res = requests.get(WEBHOOK_LER, timeout=10)
+        if res.status_code == 200:
+            dados_json = res.json()
+            if isinstance(dados_json, dict):
+                df = pd.DataFrame(
+                    dados_json.get("dados", dados_json.get("value", []))
+                )
+            elif isinstance(dados_json, list):
+                df = pd.DataFrame(dados_json)
+            else:
+                df = pd.DataFrame()
+
+            if not df.empty:
+                df.columns = df.columns.str.strip().str.lower()
+            return df
+        return pd.DataFrame()
+    except Exception:
+        return pd.DataFrame()
+
+
+# Carrega do backend ou do cache
+df_carregado = carregar_dados_lists()
+
+if (
+    "df_dados" not in st.session_state
+    or st.session_state.get("forcar_recarga", False)
+):
+    st.session_state["df_dados"] = df_carregado.copy()
+    st.session_state["forcar_recarga"] = False
 
 df_dados = st.session_state["df_dados"]
 
-# --- 5. INTERFACE PRINCIPAL ---
+# --- 6. INTERFACE PRINCIPAL ---
 st.title("🔍 Gemba Walk Digital")
 aba1, aba2, aba3 = st.tabs(
     ["📋 Novo Registro", "📌 Quadro de Post-its", "📊 Dashboard"]
@@ -148,14 +183,11 @@ with aba1:
                     try:
                         res = requests.post(WEBHOOK_CRIAR, json=payload)
                         if res.status_code in [200, 202]:
-                            novo_df = pd.DataFrame([payload])
-                            st.session_state["df_dados"] = pd.concat(
-                                [st.session_state["df_dados"], novo_df],
-                                ignore_index=True,
-                            )
                             st.success(
                                 "Não conformidade salva com sucesso no Microsoft Lists!"
                             )
+                            st.cache_data.clear()
+                            st.session_state["forcar_recarga"] = True
                             st.rerun()
                         else:
                             st.error(
@@ -172,7 +204,7 @@ with aba2:
     st.subheader("📌 Pendências Ativas (Post-its)")
 
     if df_dados.empty or "status" not in df_dados.columns:
-        st.info("Nenhuma pendência cadastrada na sessão atual.")
+        st.info("Nenhuma pendência cadastrada na base de dados.")
     else:
         df_dados["status_clean"] = (
             df_dados["status"]
@@ -227,20 +259,9 @@ with aba2:
                                     timeout=10,
                                 )
                                 if res_sol.status_code in [200, 202]:
-                                    mask = (
-                                        st.session_state["df_dados"][
-                                            "id"
-                                        ].astype(str)
-                                        == item_id
-                                    )
-                                    st.session_state["df_dados"].loc[
-                                        mask, "status"
-                                    ] = "Resolvido"
-                                    st.session_state["df_dados"].loc[
-                                        mask, "data_solucao"
-                                    ] = data_solucao_str
-
                                     st.toast("Item resolvido!", icon="✅")
+                                    st.cache_data.clear()
+                                    st.session_state["forcar_recarga"] = True
                                     st.rerun()
                                 else:
                                     st.error(
