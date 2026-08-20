@@ -26,7 +26,7 @@ WEBHOOK_RESOLVER = st.secrets.get(
 # Cole aqui a URL do seu fluxo "Gemba - Ler Dados" do Power Automate
 WEBHOOK_LER = st.secrets.get(
     "POWER_AUTOMATE_LER_URL", 
-    "COLE_AQU_A_URL_DO_FLUXO_DE_LEITURA"
+    "https://defaultcd14821755e24b4e86f837f80bf5ae.f3.environment.api.powerplatform.com:443/powerautomate/automations/direct/cu/27/workflows/62a264c57b214336aa6205ae2fb47c59/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=JJ2EZPMarOKgpxHQNzHh0ZR7N5LKtQ53eEO1wB-eePM"
 )
 
 CATEGORIAS = {
