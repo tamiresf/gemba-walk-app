@@ -64,12 +64,19 @@ def carregar_dados_e_usuarios():
             if not df_dados.empty:
                 df_dados.columns = df_dados.columns.str.strip().str.lower()
 
-            # Processa e-mails para autocompletar
-            emails = [
-                u.get("mail") or u.get("userPrincipalName")
-                for u in usuarios
-                if u.get("mail") or u.get("userPrincipalName")
-            ]
+            # Extração robusta dos e-mails (aceita variações de maiúsculas/minúsculas)
+            emails = []
+            for u in usuarios:
+                if isinstance(u, dict):
+                    email = (
+                        u.get("mail")
+                        or u.get("Mail")
+                        or u.get("userPrincipalName")
+                        or u.get("UserPrincipalName")
+                    )
+                    if email:
+                        emails.append(email)
+
             emails_unicos = sorted(list(set(emails)))
 
             return df_dados, emails_unicos
@@ -171,7 +178,10 @@ with aba1:
                             st.success(
                                 "Não conformidade salva com sucesso no Microsoft Lists!"
                             )
+                            # Limpa o cache dos dados
                             st.cache_data.clear()
+                            # Força a atualização da página imediatamente para o post-it aparecer
+                            st.rerun()
                         else:
                             st.error(
                                 f"Erro no Power Automate (Código {res.status_code}): {res.text}"
