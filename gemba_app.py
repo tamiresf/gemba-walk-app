@@ -41,7 +41,6 @@ EMAILS_CORPORATIVOS = sorted(
         ])
     )
 )
-OPCOES_EMAILS = [""] + EMAILS_CORPORATIVOS
 
 # --- 4. CATEGORIAS DA INSPEÇÃO ---
 CATEGORIAS = {
@@ -136,10 +135,12 @@ with aba1:
             causa = st.text_area("Causa aparente?")
             acao_imediata = st.text_area("Ação imediata?")
 
-            # Campo com busca por inicial (Autocomplete)
+            # Campo ajustado sem o "Choose an option"
             responsavel_email = st.selectbox(
                 "E-mail do Responsável*",
-                options=OPCOES_EMAILS,
+                options=EMAILS_CORPORATIVOS,
+                index=None,
+                placeholder="Selecione ou digite o e-mail...",
                 help="Digite as primeiras letras do e-mail para filtrar a lista.",
             )
 
