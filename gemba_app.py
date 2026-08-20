@@ -64,20 +64,33 @@ def carregar_dados_e_usuarios():
             if not df_dados.empty:
                 df_dados.columns = df_dados.columns.str.strip().str.lower()
 
-            # Extração robusta dos e-mails (aceita variações de maiúsculas/minúsculas)
+            # Extração dos e-mails com verificação ampla de propriedades da API do Office 365
             emails = []
-            for u in usuarios:
-                if isinstance(u, dict):
-                    email = (
-                        u.get("mail")
-                        or u.get("Mail")
-                        or u.get("userPrincipalName")
-                        or u.get("UserPrincipalName")
-                    )
-                    if email:
-                        emails.append(email)
+            if isinstance(usuarios, list):
+                for u in usuarios:
+                    if isinstance(u, dict):
+                        email = (
+                            u.get("mail")
+                            or u.get("Mail")
+                            or u.get("userPrincipalName")
+                            or u.get("UserPrincipalName")
+                            or u.get("mailNickname")
+                        )
+                        if email and "@" in str(email):
+                            emails.append(str(email).lower().strip())
 
             emails_unicos = sorted(list(set(emails)))
+
+            # Alerta visual de diagnóstico
+            if not emails_unicos:
+                st.warning(
+                    "⚠️ Nenhum e-mail retornado do Power Automate. O campo aceitará entrada manual."
+                )
+            else:
+                st.toast(
+                    f"📧 {len(emails_unicos)} e-mails carregados com sucesso!",
+                    icon="✅",
+                )
 
             return df_dados, emails_unicos
         else:
@@ -128,7 +141,7 @@ with aba1:
             causa = st.text_area("Causa aparente?")
             acao_imediata = st.text_area("Ação imediata?")
 
-            # Campo de E-mail Responsável com autocomplete da lista corporativa
+            # Campo de E-mail Responsável com sugestões/autocomplete da lista corporativa
             if lista_emails_corporativos:
                 responsavel_email = st.selectbox(
                     "E-mail do Responsável*",
