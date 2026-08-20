@@ -68,10 +68,6 @@ if "df_dados" not in st.session_state:
 
 df_dados = st.session_state["df_dados"]
 
-# --- DIAGNÓSTICO ---
-with st.sidebar.expander("🛠️ Diagnóstico do Sistema"):
-    st.write(f"**E-mails cadastrados:** {len(LISTA_EMAILS_CORPORATIVOS)}")
-
 # --- 5. INTERFACE PRINCIPAL ---
 st.title("🔍 Gemba Walk Digital")
 aba1, aba2, aba3 = st.tabs(
@@ -80,50 +76,53 @@ aba1, aba2, aba3 = st.tabs(
 
 # --- ABA 1: NOVO REGISTRO ---
 with aba1:
-    st.subheader("Informações Gerais")
-    col1, col2 = st.columns(2)
-    with col1:
-        auditor = st.text_input("Nome do Auditor/Gestor*")
-    with col2:
-        estacao = st.text_input("Área / Estação*")
+    with st.form("form_novo_registro", clear_on_submit=True):
+        st.subheader("Informações Gerais")
+        col1, col2 = st.columns(2)
+        with col1:
+            auditor = st.text_input("Nome do Auditor/Gestor*")
+        with col2:
+            estacao = st.text_input("Área / Estação*")
 
-    categoria_sel = st.selectbox(
-        "Selecione a Categoria", list(CATEGORIAS.keys())
-    )
-    st.info(f"💡 **O que observar:** {CATEGORIAS[categoria_sel]}")
+        categoria_sel = st.selectbox(
+            "Selecione a Categoria", list(CATEGORIAS.keys())
+        )
+        st.info(f"💡 **O que observar:** {CATEGORIAS[categoria_sel]}")
 
-    status_op = st.radio(
-        "Status da Inspeção", ["Conforme", "Não Conforme"], horizontal=True
-    )
+        status_op = st.radio(
+            "Status da Inspeção", ["Conforme", "Não Conforme"], horizontal=True
+        )
 
-    if status_op == "Não Conforme":
-        with st.form("form_nc", clear_on_submit=True):
-            st.warning("Preencha os detalhes da Não Conformidade:")
+        st.divider()
 
-            problema = st.text_area("Qual foi o problema?*")
-            local = st.text_input("Onde ocorreu?*")
-            impacto = st.text_area("Qual o impacto?")
-            causa = st.text_area("Causa aparente?")
-            acao_imediata = st.text_area("Ação imediata?")
+        st.warning("Preencha os detalhes (Obrigatório se Não Conforme):")
+        problema = st.text_area("Qual foi o problema?")
+        local = st.text_input("Onde ocorreu?")
+        impacto = st.text_area("Qual o impacto?")
+        causa = st.text_area("Causa aparente?")
+        acao_imediata = st.text_area("Ação imediata?")
 
-            responsavel_email = st.selectbox(
-                "E-mail do Responsável*",
-                options=OPCOES_EMAILS,
-                help="Digite para buscar e filtrar o e-mail corporativo.",
-            )
+        responsavel_email = st.selectbox(
+            "E-mail do Responsável",
+            options=OPCOES_EMAILS,
+            help="Digite para buscar e filtrar o e-mail corporativo.",
+        )
 
-            prazo = st.date_input("Prazo para Solução", value=date.today())
+        prazo = st.date_input("Prazo para Solução", value=date.today())
 
-            submitted = st.form_submit_button("Salvar Não Conformidade")
+        submitted = st.form_submit_button("Salvar Registro")
 
-            if submitted:
+        if submitted:
+            if status_op == "Não Conforme":
                 if (
                     not auditor
                     or not estacao
                     or not problema
                     or not responsavel_email
                 ):
-                    st.error("Preencha todos os campos obrigatórios (*).")
+                    st.error(
+                        "Preencha todos os campos obrigatórios (*) para Não Conformidades."
+                    )
                 else:
                     id_unico = str(uuid.uuid4())[:8]
 
@@ -149,7 +148,6 @@ with aba1:
                     try:
                         res = requests.post(WEBHOOK_CRIAR, json=payload)
                         if res.status_code in [200, 202]:
-                            # Atualiza a visualização local em memória
                             novo_df = pd.DataFrame([payload])
                             st.session_state["df_dados"] = pd.concat(
                                 [st.session_state["df_dados"], novo_df],
@@ -164,12 +162,10 @@ with aba1:
                                 f"Erro no Power Automate (Código {res.status_code}): {res.text}"
                             )
                     except Exception as e:
-                        st.error(
-                            f"Falha de conexão com o Power Automate: {e}"
-                        )
-    else:
-        if st.button("Salvar Conformidade"):
-            st.success("Conformidade registrada com sucesso!")
+                        st.error(f"Falha de conexão com o Power Automate: {e}")
+            else:
+                st.success("Conformidade registrada com sucesso!")
+                st.rerun()
 
 # --- ABA 2: QUADRO DE POST-ITS ---
 with aba2:
