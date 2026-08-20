@@ -43,7 +43,7 @@ CATEGORIAS = {
 
 
 # --- 4. FUNÇÃO PARA CARREGAR DADOS E E-MAILS DO POWER AUTOMATE ---
-@st.cache_data(ttl=60, show_spinner=False)
+@st.cache_data(ttl=10, show_spinner=False)
 def carregar_dados_e_usuarios():
     try:
         res = requests.get(WEBHOOK_LER, timeout=10)
@@ -53,17 +53,16 @@ def carregar_dados_e_usuarios():
             df_dados = pd.DataFrame()
             usuarios = []
 
-            # 1. Trata os diferentes formatos de retorno do Power Automate
             if isinstance(dados_json, dict):
-                # Extrai dados dos registros
                 if "dados" in dados_json:
                     df_dados = pd.DataFrame(dados_json.get("dados", []))
                 elif "value" in dados_json:
                     df_dados = pd.DataFrame(dados_json.get("value", []))
 
-                # Procura lista de usuários/e-mails nas chaves possíveis
                 for chave_usr in ["usuarios", "users", "emails", "value"]:
-                    if chave_usr in dados_json and isinstance(dados_json[chave_usr], list):
+                    if chave_usr in dados_json and isinstance(
+                        dados_json[chave_usr], list
+                    ):
                         usuarios = dados_json[chave_usr]
                         break
             elif isinstance(dados_json, list):
@@ -73,7 +72,6 @@ def carregar_dados_e_usuarios():
             if not df_dados.empty:
                 df_dados.columns = df_dados.columns.str.strip().str.lower()
 
-            # 2. Varredura profunda nos objetos para extrair endereços de e-mail válidos
             emails = []
             if isinstance(usuarios, list):
                 for u in usuarios:
@@ -88,22 +86,37 @@ def carregar_dados_e_usuarios():
 
             return df_dados, emails_unicos
         else:
-            st.error(f"Erro ao buscar dados do Power Automate (Código {res.status_code})")
+            st.error(
+                f"Erro ao buscar dados do Power Automate (Código {res.status_code})"
+            )
             return pd.DataFrame(), []
     except Exception as e:
         st.error(f"Falha de conexão com o Power Automate: {e}")
         return pd.DataFrame(), []
 
 
-# Obter registros do banco e lista de e-mails para preenchimento
-df_dados, lista_emails_corporativos = carregar_dados_e_usuarios()
+# Obter registros e e-mails do backend
+df_dados_raw, lista_emails_corporativos = carregar_dados_e_usuarios()
 opcoes_emails = [""] + lista_emails_corporativos
+
+# Inicializa ou sincroniza a base local do session_state
+if (
+    "df_dados" not in st.session_state
+    or st.session_state.get("forcar_recarga", False)
+):
+    st.session_state["df_dados"] = df_dados_raw.copy()
+    st.session_state["forcar_recarga"] = False
+
+df_dados = st.session_state["df_dados"]
 
 # --- DIAGNÓSTICO (Visível apenas na barra lateral recolhida) ---
 with st.sidebar.expander("🛠️ Diagnóstico do Sistema"):
     st.write(f"**E-mails carregados:** {len(lista_emails_corporativos)}")
     if lista_emails_corporativos:
-        st.caption(", ".join(lista_emails_corporativos[:5]) + ("..." if len(lista_emails_corporativos) > 5 else ""))
+        st.caption(
+            ", ".join(lista_emails_corporativos[:5])
+            + ("..." if len(lista_emails_corporativos) > 5 else "")
+        )
 
 # --- 5. INTERFACE PRINCIPAL ---
 st.title("🔍 Gemba Walk Digital")
@@ -139,7 +152,6 @@ with aba1:
             causa = st.text_area("Causa aparente?")
             acao_imediata = st.text_area("Ação imediata?")
 
-            # Campo de E-mail Responsável com sugestões/autocomplete da lista corporativa
             if lista_emails_corporativos:
                 responsavel_email = st.selectbox(
                     "E-mail do Responsável*",
@@ -189,9 +201,8 @@ with aba1:
                             st.success(
                                 "Não conformidade salva com sucesso no Microsoft Lists!"
                             )
-                            # Limpa o cache dos dados
                             st.cache_data.clear()
-                            # Força a atualização da página imediatamente para o post-it aparecer
+                            st.session_state["forcar_recarga"] = True
                             st.rerun()
                         else:
                             st.error(
@@ -214,16 +225,23 @@ with aba2:
             "Nenhuma pendência encontrada ou aguardando sincronização com a lista."
         )
     else:
-        pendentes = df_dados[
-            df_dados["status"].astype(str).str.strip().str.capitalize()
-            == "Pendente"
-        ]
+        # Tratamento rigoroso da coluna de status
+        df_dados["status_clean"] = (
+            df_dados["status"]
+            .fillna("")
+            .astype(str)
+            .str.strip()
+            .str.capitalize()
+        )
+
+        pendentes = df_dados[df_dados["status_clean"] == "Pendente"]
 
         if pendentes.empty:
             st.success("🎉 Nenhuma pendência aberta no momento!")
         else:
             cols = st.columns(2)
             for idx, row in pendentes.reset_index().iterrows():
+                item_id = str(row.get("id", ""))
                 with cols[idx % 2]:
                     with st.container(border=True):
                         st.markdown(f"### 🟨 {row.get('categoria', 'N/A')}")
@@ -245,27 +263,42 @@ with aba2:
                         st.write(f"**Prazo:** {row.get('prazo', '')}")
 
                         if st.button(
-                            "✅ Resolvido", key=f"btn_res_{row.get('id')}"
+                            "✅ Resolvido", key=f"btn_res_{item_id}_{idx}"
                         ):
+                            data_solucao_str = datetime.now().strftime(
+                                "%Y-%m-%d %H:%M:%S"
+                            )
                             payload_sol = {
-                                "id": str(row.get("id")),
-                                "data_solucao": datetime.now().strftime(
-                                    "%Y-%m-%d %H:%M:%S"
-                                ),
+                                "id": item_id,
+                                "data_solucao": data_solucao_str,
                             }
                             try:
                                 res_sol = requests.post(
-                                    WEBHOOK_RESOLVER, json=payload_sol
+                                    WEBHOOK_RESOLVER,
+                                    json=payload_sol,
+                                    timeout=10,
                                 )
                                 if res_sol.status_code in [200, 202]:
-                                    st.success(
-                                        "Item resolvido e atualizado na lista!"
+                                    # Atualização otimista imediata na memória da aplicação
+                                    mask = (
+                                        st.session_state["df_dados"][
+                                            "id"
+                                        ].astype(str)
+                                        == item_id
                                     )
+                                    st.session_state["df_dados"].loc[
+                                        mask, "status"
+                                    ] = "Resolvido"
+                                    st.session_state["df_dados"].loc[
+                                        mask, "data_solucao"
+                                    ] = data_solucao_str
+
+                                    st.toast("Item resolvido!", icon="✅")
                                     st.cache_data.clear()
                                     st.rerun()
                                 else:
                                     st.error(
-                                        f"Erro ao atualizar status: {res_sol.status_code}"
+                                        f"Erro ao atualizar status no Power Automate: {res_sol.status_code}"
                                     )
                             except Exception as e:
                                 st.error(f"Falha de conexão: {e}")
@@ -275,32 +308,22 @@ with aba3:
     st.subheader("📊 Indicadores do Gemba Walk")
 
     if not df_dados.empty and "status" in df_dados.columns:
+        status_serie = (
+            df_dados["status"]
+            .fillna("")
+            .astype(str)
+            .str.strip()
+            .str.capitalize()
+        )
+
+        total_registros = len(df_dados)
+        qtd_pendentes = (status_serie == "Pendente").sum()
+        qtd_resolvidos = (status_serie == "Resolvido").sum()
+
         c1, c2, c3 = st.columns(3)
-        c1.metric("Total de Registros", len(df_dados))
-        c2.metric(
-            "Pendentes",
-            len(
-                df_dados[
-                    df_dados["status"]
-                    .astype(str)
-                    .str.strip()
-                    .str.capitalize()
-                    == "Pendente"
-                ]
-            ),
-        )
-        c3.metric(
-            "Resolvidos",
-            len(
-                df_dados[
-                    df_dados["status"]
-                    .astype(str)
-                    .str.strip()
-                    .str.capitalize()
-                    == "Resolvido"
-                ]
-            ),
-        )
+        c1.metric("Total de Registros", total_registros)
+        c2.metric("Pendentes", qtd_pendentes)
+        c3.metric("Resolvidos", qtd_resolvidos)
 
         st.divider()
         st.markdown("**Problemas Encontrados por Categoria**")
