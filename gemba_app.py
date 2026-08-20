@@ -50,53 +50,45 @@ def carregar_dados_e_usuarios():
         if res.status_code == 200:
             dados_json = res.json()
 
-            # Trata se a resposta vier no formato novo (dados + usuarios) ou legado
-            if isinstance(dados_json, dict) and "usuarios" in dados_json:
-                df_dados = pd.DataFrame(dados_json.get("dados", []))
-                usuarios = dados_json.get("usuarios", [])
-            elif isinstance(dados_json, dict) and "value" in dados_json:
-                df_dados = pd.DataFrame(dados_json.get("value", []))
-                usuarios = []
-            else:
+            df_dados = pd.DataFrame()
+            usuarios = []
+
+            # 1. Trata os diferentes formatos de retorno do Power Automate
+            if isinstance(dados_json, dict):
+                # Extrai dados dos registros
+                if "dados" in dados_json:
+                    df_dados = pd.DataFrame(dados_json.get("dados", []))
+                elif "value" in dados_json:
+                    df_dados = pd.DataFrame(dados_json.get("value", []))
+
+                # Procura lista de usuários/e-mails nas chaves possíveis
+                for chave_usr in ["usuarios", "users", "emails", "value"]:
+                    if chave_usr in dados_json and isinstance(dados_json[chave_usr], list):
+                        usuarios = dados_json[chave_usr]
+                        break
+            elif isinstance(dados_json, list):
                 df_dados = pd.DataFrame(dados_json)
-                usuarios = []
+                usuarios = dados_json
 
             if not df_dados.empty:
                 df_dados.columns = df_dados.columns.str.strip().str.lower()
 
-            # Extração dos e-mails com verificação ampla de propriedades da API do Office 365
+            # 2. Varredura profunda nos objetos para extrair endereços de e-mail válidos
             emails = []
             if isinstance(usuarios, list):
                 for u in usuarios:
                     if isinstance(u, dict):
-                        email = (
-                            u.get("mail")
-                            or u.get("Mail")
-                            or u.get("userPrincipalName")
-                            or u.get("UserPrincipalName")
-                            or u.get("mailNickname")
-                        )
-                        if email and "@" in str(email):
-                            emails.append(str(email).lower().strip())
+                        for k, v in u.items():
+                            if v and isinstance(v, str) and "@" in v:
+                                emails.append(v.lower().strip())
+                    elif isinstance(u, str) and "@" in u:
+                        emails.append(u.lower().strip())
 
             emails_unicos = sorted(list(set(emails)))
 
-            # Alerta visual de diagnóstico
-            if not emails_unicos:
-                st.warning(
-                    "⚠️ Nenhum e-mail retornado do Power Automate. O campo aceitará entrada manual."
-                )
-            else:
-                st.toast(
-                    f"📧 {len(emails_unicos)} e-mails carregados com sucesso!",
-                    icon="✅",
-                )
-
             return df_dados, emails_unicos
         else:
-            st.error(
-                f"Erro ao buscar dados do Power Automate (Código {res.status_code})"
-            )
+            st.error(f"Erro ao buscar dados do Power Automate (Código {res.status_code})")
             return pd.DataFrame(), []
     except Exception as e:
         st.error(f"Falha de conexão com o Power Automate: {e}")
@@ -106,6 +98,12 @@ def carregar_dados_e_usuarios():
 # Obter registros do banco e lista de e-mails para preenchimento
 df_dados, lista_emails_corporativos = carregar_dados_e_usuarios()
 opcoes_emails = [""] + lista_emails_corporativos
+
+# --- DIAGNÓSTICO (Visível apenas na barra lateral recolhida) ---
+with st.sidebar.expander("🛠️ Diagnóstico do Sistema"):
+    st.write(f"**E-mails carregados:** {len(lista_emails_corporativos)}")
+    if lista_emails_corporativos:
+        st.caption(", ".join(lista_emails_corporativos[:5]) + ("..." if len(lista_emails_corporativos) > 5 else ""))
 
 # --- 5. INTERFACE PRINCIPAL ---
 st.title("🔍 Gemba Walk Digital")
