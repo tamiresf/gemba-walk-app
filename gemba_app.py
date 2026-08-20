@@ -12,7 +12,7 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
-# --- CARREGAR URLs DOS SECRETS (URLs Corrigidas) ---
+# --- CARREGAR URLs DOS SECRETS ---
 WEBHOOK_CRIAR = st.secrets.get(
     "POWER_AUTOMATE_CRIAR_URL", 
     "https://defaultcd14821755e24b4e86f837f80bf5ae.f3.environment.api.powerplatform.com:443/powerautomate/automations/direct/cu/08/workflows/24e560b839864d9b91720231dbb6584e/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=cZEo_aNlKwbk9kP84Yu_OITxnl6wZqrM-RCGjOZXzss"
@@ -23,10 +23,10 @@ WEBHOOK_RESOLVER = st.secrets.get(
     "https://defaultcd14821755e24b4e86f837f80bf5ae.f3.environment.api.powerplatform.com:443/powerautomate/automations/direct/cu/06/workflows/a1df9787e2b94d19ab5643e165491bc8/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=yLF9HKRO6XtG75qHGA_U7X1g-NMCcnT4QHGXPdUkiFA"
 )
 
-# NOVA URL DO SHAREPOINT AJUSTADA COM PARÂMETRO DE DOWNLOAD
-EXCEL_READ_URL = st.secrets.get(
-    "EXCEL_READ_URL", 
-    "https://mustad365.sharepoint.com/:x:/s/LATAM/MBL/IQAPSTMSVrHsQLv4AQ3Yzxq8AQaT4uj9nirde2JN9qh2glE?e=JrIAOY"
+# Cole aqui a URL do seu fluxo "Gemba - Ler Dados" do Power Automate
+WEBHOOK_LER = st.secrets.get(
+    "POWER_AUTOMATE_LER_URL", 
+    "COLE_AQU_A_URL_DO_FLUXO_DE_LEITURA"
 )
 
 CATEGORIAS = {
@@ -41,18 +41,31 @@ CATEGORIAS = {
     "Meio ambiente": "Resíduos, sucata, descarte, organização"
 }
 
-# --- FUNÇÃO PARA CARREGAR DADOS DO SHAREPOINT ---
+# --- FUNÇÃO PARA CARREGAR DADOS DO MICROSOFT LISTS ---
 @st.cache_data(ttl=5)
 def carregar_dados():
-    if EXCEL_READ_URL:
-        try:
-            df = pd.read_excel(EXCEL_READ_URL)
-            df.columns = df.columns.str.strip().str.lower()
+    if "COLE_AQUI" in WEBHOOK_LER:
+        st.warning("Insira a URL do fluxo de leitura na variável WEBHOOK_LER.")
+        return pd.DataFrame()
+    try:
+        res = requests.get(WEBHOOK_LER)
+        if res.status_code == 200:
+            dados = res.json()
+            
+            # Trata se a resposta vier dentro da chave 'value' da API do SharePoint
+            if isinstance(dados, dict) and "value" in dados:
+                dados = dados["value"]
+                
+            df = pd.DataFrame(dados)
+            if not df.empty:
+                df.columns = df.columns.str.strip().str.lower()
             return df
-        except Exception as e:
-            st.error(f"Erro ao ler a planilha Excel: {e}")
+        else:
+            st.error(f"Erro ao buscar dados do Power Automate (Código {res.status_code})")
             return pd.DataFrame()
-    return pd.DataFrame()
+    except Exception as e:
+        st.error(f"Falha de conexão com o Power Automate: {e}")
+        return pd.DataFrame()
 
 # --- INTERFACE PRINCIPAL ---
 st.title("🔍 Gemba Walk Digital")
@@ -112,7 +125,7 @@ with aba1:
                     try:
                         res = requests.post(WEBHOOK_CRIAR, json=payload)
                         if res.status_code in [200, 202]:
-                            st.success("Não conformidade salva com sucesso no Excel do SharePoint!")
+                            st.success("Não conformidade salva com sucesso no Microsoft Lists!")
                             st.cache_data.clear()
                         else:
                             st.error(f"Erro no Power Automate (Código {res.status_code}): {res.text}")
@@ -128,7 +141,7 @@ with aba2:
     df_dados = carregar_dados()
     
     if df_dados.empty or "status" not in df_dados.columns:
-        st.info("Nenhuma pendência encontrada ou aguardando sincronização com a planilha.")
+        st.info("Nenhuma pendência encontrada ou aguardando sincronização com a lista.")
     else:
         pendentes = df_dados[df_dados["status"].astype(str).str.strip().str.capitalize() == "Pendente"]
         
@@ -157,7 +170,7 @@ with aba2:
                             try:
                                 res_sol = requests.post(WEBHOOK_RESOLVER, json=payload_sol)
                                 if res_sol.status_code in [200, 202]:
-                                    st.success("Item resolvido e atualizado no Excel!")
+                                    st.success("Item resolvido e atualizado na lista!")
                                     st.cache_data.clear()
                                     st.rerun()
                                 else:
