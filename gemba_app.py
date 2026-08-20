@@ -146,7 +146,7 @@ with aba1:
 
             prazo = st.date_input("Prazo para Solução", value=date.today())
 
-            submitted = st.form_submit_button("Salvar não conformidade")
+            submitted = st.form_submit_button("Salvar")
 
             if submitted:
                 if (
