@@ -28,7 +28,7 @@ WEBHOOK_LER = st.secrets.get(
     "https://defaultcd14821755e24b4e86f837f80bf5ae.f3.environment.api.powerplatform.com:443/powerautomate/automations/direct/cu/27/workflows/62a264c57b214336aa6205ae2fb47c59/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=JJ2EZPMarOKgpxHQNzHh0ZR7N5LKtQ53eEO1wB-eePM",
 )
 
-# --- 3. LISTA DE E-MAILS CORPORATIVOS (FIXO NO CÓDIGO) ---
+# --- 3. LISTA DE E-MAILS CORPORATIVOS ---
 EMAILS_BRUTOS = [
     "jaqueline.silva@mustad.com",
     "geovane.valdevino@mustad.com",
@@ -67,44 +67,55 @@ CATEGORIAS = {
 }
 
 
-# --- 5. FUNÇÃO PARA CARREGAR REGISTROS DO MICROSOFT LISTS ---
-@st.cache_data(ttl=15, show_spinner=False)
+# --- 5. FUNÇÃO PARA CARREGAR DADOS DIRETO DO MICROSOFT LISTS ---
+@st.cache_data(ttl=5, show_spinner=False)
 def carregar_dados_lists():
+    headers = {"Accept": "application/json", "Content-Type": "application/json"}
     try:
-        res = requests.get(WEBHOOK_LER, timeout=10)
+        res = requests.get(WEBHOOK_LER, headers=headers, timeout=15)
         if res.status_code == 200:
             dados_json = res.json()
-            if isinstance(dados_json, dict):
-                df = pd.DataFrame(
-                    dados_json.get("dados", dados_json.get("value", []))
-                )
-            elif isinstance(dados_json, list):
-                df = pd.DataFrame(dados_json)
-            else:
-                df = pd.DataFrame()
 
-            if not df.empty:
-                df.columns = df.columns.str.strip().str.lower()
+            # Extração defensiva da lista de itens no retorno JSON
+            itens = []
+            if isinstance(dados_json, list):
+                itens = dados_json
+            elif isinstance(dados_json, dict):
+                itens = (
+                    dados_json.get("dados")
+                    or dados_json.get("value")
+                    or dados_json.get("body")
+                    or []
+                )
+
+            if not itens:
+                return pd.DataFrame()
+
+            df = pd.DataFrame(itens)
+
+            # Padroniza todas as colunas para minúsculo
+            df.columns = df.columns.astype(str).str.strip().str.lower()
+
             return df
-        return pd.DataFrame()
+        else:
+            return pd.DataFrame()
     except Exception:
         return pd.DataFrame()
 
 
-# Carrega do backend ou do cache
-df_carregado = carregar_dados_lists()
-
-if (
-    "df_dados" not in st.session_state
-    or st.session_state.get("forcar_recarga", False)
-):
-    st.session_state["df_dados"] = df_carregado.copy()
-    st.session_state["forcar_recarga"] = False
-
-df_dados = st.session_state["df_dados"]
+# Forçar busca de dados atualizada do Lists
+df_dados = carregar_dados_lists()
 
 # --- 6. INTERFACE PRINCIPAL ---
-st.title("🔍 Gemba Walk Digital")
+col_head1, col_head2 = st.columns([4, 1])
+with col_head1:
+    st.title("🔍 Gemba Walk Digital")
+with col_head2:
+    st.write("")
+    if st.button("🔄 Sincronizar Lists"):
+        st.cache_data.clear()
+        st.rerun()
+
 aba1, aba2, aba3 = st.tabs(
     ["📋 Novo Registro", "📌 Quadro de Post-its", "📊 Dashboard"]
 )
@@ -187,7 +198,6 @@ with aba1:
                                 "Não conformidade salva com sucesso no Microsoft Lists!"
                             )
                             st.cache_data.clear()
-                            st.session_state["forcar_recarga"] = True
                             st.rerun()
                         else:
                             st.error(
@@ -203,98 +213,119 @@ with aba1:
 with aba2:
     st.subheader("📌 Pendências Ativas (Post-its)")
 
-    if df_dados.empty or "status" not in df_dados.columns:
-        st.info("Nenhuma pendência cadastrada na base de dados.")
+    if df_dados.empty:
+        st.info("Nenhuma pendência encontrada ou aguardando resposta do Microsoft Lists.")
     else:
-        df_dados["status_clean"] = (
-            df_dados["status"]
-            .fillna("")
-            .astype(str)
-            .str.strip()
-            .str.capitalize()
+        # Tenta identificar a coluna de status flexivelmente
+        col_status = next(
+            (c for c in df_dados.columns if "status" in c), None
         )
 
-        pendentes = df_dados[df_dados["status_clean"] == "Pendente"]
-
-        if pendentes.empty:
-            st.success("🎉 Nenhuma pendência aberta no momento!")
+        if col_status is None:
+            st.warning("A coluna 'Status' não foi encontrada na resposta do Microsoft Lists.")
         else:
-            cols = st.columns(2)
-            for idx, row in pendentes.reset_index().iterrows():
-                item_id = str(row.get("id", ""))
-                with cols[idx % 2]:
-                    with st.container(border=True):
-                        st.markdown(f"### 🟨 {row.get('categoria', 'N/A')}")
-                        st.caption(
-                            f"**Criado por:** {row.get('auditor', 'N/A')} em {row.get('data_criacao', 'N/A')}"
-                        )
-                        st.write(
-                            f"**Local:** {row.get('estacao', '')} - {row.get('local', '')}"
-                        )
-                        st.write(f"**Problema:** {row.get('problema', '')}")
-                        st.write(f"**Impacto:** {row.get('impacto', '')}")
-                        st.write(f"**Causa Aparente:** {row.get('causa', '')}")
-                        st.write(
-                            f"**Ação Imediata:** {row.get('acao_imediata', '')}"
-                        )
-                        st.write(
-                            f"**Responsável:** {row.get('responsavel', '')}"
-                        )
-                        st.write(f"**Prazo:** {row.get('prazo', '')}")
+            df_dados["status_clean"] = (
+                df_dados[col_status]
+                .fillna("")
+                .astype(str)
+                .str.strip()
+                .str.capitalize()
+            )
 
-                        if st.button(
-                            "✅ Resolvido", key=f"btn_res_{item_id}_{idx}"
-                        ):
-                            data_solucao_str = datetime.now().strftime(
-                                "%Y-%m-%d %H:%M:%S"
+            pendentes = df_dados[df_dados["status_clean"] == "Pendente"]
+
+            if pendentes.empty:
+                st.success("🎉 Nenhuma pendência aberta no momento!")
+            else:
+                cols = st.columns(2)
+                for idx, row in pendentes.reset_index().iterrows():
+                    item_id = str(row.get("id", row.get("title", idx)))
+                    with cols[idx % 2]:
+                        with st.container(border=True):
+                            st.markdown(
+                                f"### 🟨 {row.get('categoria', 'Não Conformidade')}"
                             )
-                            payload_sol = {
-                                "id": item_id,
-                                "data_solucao": data_solucao_str,
-                            }
-                            try:
-                                res_sol = requests.post(
-                                    WEBHOOK_RESOLVER,
-                                    json=payload_sol,
-                                    timeout=10,
+                            st.caption(
+                                f"**Criado por:** {row.get('auditor', 'N/A')} em {row.get('data_criacao', row.get('created', 'N/A'))}"
+                            )
+                            st.write(
+                                f"**Local:** {row.get('estacao', '')} - {row.get('local', '')}"
+                            )
+                            st.write(f"**Problema:** {row.get('problema', '')}")
+                            st.write(f"**Impacto:** {row.get('impacto', '')}")
+                            st.write(f"**Causa Aparente:** {row.get('causa', '')}")
+                            st.write(
+                                f"**Ação Imediata:** {row.get('acao_imediata', '')}"
+                            )
+                            st.write(
+                                f"**Responsável:** {row.get('responsavel', '')}"
+                            )
+                            st.write(f"**Prazo:** {row.get('prazo', '')}")
+
+                            if st.button(
+                                "✅ Resolvido", key=f"btn_res_{item_id}_{idx}"
+                            ):
+                                data_solucao_str = datetime.now().strftime(
+                                    "%Y-%m-%d %H:%M:%S"
                                 )
-                                if res_sol.status_code in [200, 202]:
-                                    st.toast("Item resolvido!", icon="✅")
-                                    st.cache_data.clear()
-                                    st.session_state["forcar_recarga"] = True
-                                    st.rerun()
-                                else:
-                                    st.error(
-                                        f"Erro ao atualizar status: {res_sol.status_code}"
+                                payload_sol = {
+                                    "id": item_id,
+                                    "data_solucao": data_solucao_str,
+                                }
+                                try:
+                                    res_sol = requests.post(
+                                        WEBHOOK_RESOLVER,
+                                        json=payload_sol,
+                                        timeout=10,
                                     )
-                            except Exception as e:
-                                st.error(f"Falha de conexão: {e}")
+                                    if res_sol.status_code in [200, 202]:
+                                        st.toast("Item resolvido!", icon="✅")
+                                        st.cache_data.clear()
+                                        st.rerun()
+                                    else:
+                                        st.error(
+                                            f"Erro ao atualizar status: {res_sol.status_code}"
+                                        )
+                                except Exception as e:
+                                    st.error(f"Falha de conexão: {e}")
 
 # --- ABA 3: DASHBOARD ---
 with aba3:
     st.subheader("📊 Indicadores do Gemba Walk")
 
-    if not df_dados.empty and "status" in df_dados.columns:
-        status_serie = (
-            df_dados["status"]
-            .fillna("")
-            .astype(str)
-            .str.strip()
-            .str.capitalize()
+    if not df_dados.empty:
+        col_status = next(
+            (c for c in df_dados.columns if "status" in c), None
         )
 
-        total_registros = len(df_dados)
-        qtd_pendentes = (status_serie == "Pendente").sum()
-        qtd_resolvidos = (status_serie == "Resolvido").sum()
+        if col_status:
+            status_serie = (
+                df_dados[col_status]
+                .fillna("")
+                .astype(str)
+                .str.strip()
+                .str.capitalize()
+            )
 
-        c1, c2, c3 = st.columns(3)
-        c1.metric("Total de Registros", total_registros)
-        c2.metric("Pendentes", qtd_pendentes)
-        c3.metric("Resolvidos", qtd_resolvidos)
+            total_registros = len(df_dados)
+            qtd_pendentes = (status_serie == "Pendente").sum()
+            qtd_resolvidos = (status_serie == "Resolvido").sum()
 
-        st.divider()
-        st.markdown("**Problemas Encontrados por Categoria**")
-        if "categoria" in df_dados.columns:
-            st.bar_chart(df_dados["categoria"].value_counts())
+            c1, c2, c3 = st.columns(3)
+            c1.metric("Total de Registros", total_registros)
+            c2.metric("Pendentes", qtd_pendentes)
+            c3.metric("Resolvidos", qtd_resolvidos)
+
+            st.divider()
+            st.markdown("**Problemas Encontrados por Categoria**")
+            col_cat = next(
+                (c for c in df_dados.columns if "categoria" in c), None
+            )
+            if col_cat:
+                st.bar_chart(df_dados[col_cat].value_counts())
+            else:
+                st.info("Coluna de categoria não mapeada no retorno.")
+        else:
+            st.info("Não foi possível processar o status da lista.")
     else:
         st.info("Aguardando registros para exibir indicadores.")
