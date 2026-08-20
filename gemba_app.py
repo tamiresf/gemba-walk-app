@@ -1,4 +1,4 @@
-from datetime import datetime, date
+from datetime import date, datetime
 import uuid
 import pandas as pd
 import requests
@@ -13,20 +13,9 @@ st.set_page_config(
 )
 
 # --- 2. CARREGAR URLs DOS SECRETS ---
-WEBHOOK_CRIAR = st.secrets.get(
-    "POWER_AUTOMATE_CRIAR_URL",
-    "https://defaultcd14821755e24b4e86f837f80bf5ae.f3.environment.api.powerplatform.com:443/powerautomate/automations/direct/cu/08/workflows/24e560b839864d9b91720231dbb6584e/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=cZEo_aNlKwbk9kP84Yu_OITxnl6wZqrM-RCGjOZXzss",
-)
-
-WEBHOOK_RESOLVER = st.secrets.get(
-    "POWER_AUTOMATE_RESOLVER_URL",
-    "https://defaultcd14821755e24b4e86f837f80bf5ae.f3.environment.api.powerplatform.com:443/powerautomate/automations/direct/cu/06/workflows/a1df9787e2b94d19ab5643e165491bc8/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=yLF9HKRO6XtG75qHGA_U7X1g-NMCcnT4QHGXPdUkiFA",
-)
-
-WEBHOOK_LER = st.secrets.get(
-    "POWER_AUTOMATE_LER_URL",
-    "https://defaultcd14821755e24b4e86f837f80bf5ae.f3.environment.api.powerplatform.com:443/powerautomate/automations/direct/cu/27/workflows/62a264c57b214336aa6205ae2fb47c59/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=JJ2EZPMarOKgpxHQNzHh0ZR7N5LKtQ53eEO1wB-eePM",
-)
+WEBHOOK_CRIAR = st.secrets.get("POWER_AUTOMATE_CRIAR_URL", "")
+WEBHOOK_RESOLVER = st.secrets.get("POWER_AUTOMATE_RESOLVER_URL", "")
+WEBHOOK_LER = st.secrets.get("POWER_AUTOMATE_LER_URL", "")
 
 # --- 3. CATEGORIAS DA INSPEÇÃO ---
 CATEGORIAS = {
@@ -42,81 +31,50 @@ CATEGORIAS = {
 }
 
 
-# --- 4. FUNÇÃO PARA CARREGAR DADOS E E-MAILS DO POWER AUTOMATE ---
-@st.cache_data(ttl=10, show_spinner=False)
-def carregar_dados_e_usuarios():
+# --- 4. FUNÇÃO PARA CARREGAR DADOS DO POWER AUTOMATE ---
+@st.cache_data(ttl=5, show_spinner=False)
+def carregar_dados():
     try:
         res = requests.get(WEBHOOK_LER, timeout=10)
-        if res.status_code == 200:
+        if res.status_code != 200:
+            res = requests.post(WEBHOOK_LER, json={}, timeout=10)
+
+        if res.status_code in [200, 202]:
             dados_json = res.json()
-
             df_dados = pd.DataFrame()
-            usuarios = []
 
-            if isinstance(dados_json, dict):
-                if "dados" in dados_json:
-                    df_dados = pd.DataFrame(dados_json.get("dados", []))
-                elif "value" in dados_json:
-                    df_dados = pd.DataFrame(dados_json.get("value", []))
-
-                for chave_usr in ["usuarios", "users", "emails", "value"]:
-                    if chave_usr in dados_json and isinstance(
-                        dados_json[chave_usr], list
-                    ):
-                        usuarios = dados_json[chave_usr]
-                        break
-            elif isinstance(dados_json, list):
+            if isinstance(dados_json, list):
                 df_dados = pd.DataFrame(dados_json)
-                usuarios = dados_json
+            elif isinstance(dados_json, dict):
+                for chave in ["value", "dados", "items", "body"]:
+                    if chave in dados_json and isinstance(
+                        dados_json[chave], list
+                    ):
+                        df_dados = pd.DataFrame(dados_json[chave])
+                        break
+                if df_dados.empty:
+                    df_dados = pd.DataFrame([dados_json])
 
             if not df_dados.empty:
-                df_dados.columns = df_dados.columns.str.strip().str.lower()
+                df_dados.columns = (
+                    df_dados.columns.astype(str).str.strip().str.lower()
+                )
 
-            emails = []
-            if isinstance(usuarios, list):
-                for u in usuarios:
-                    if isinstance(u, dict):
-                        for k, v in u.items():
-                            if v and isinstance(v, str) and "@" in v:
-                                emails.append(v.lower().strip())
-                    elif isinstance(u, str) and "@" in u:
-                        emails.append(u.lower().strip())
-
-            emails_unicos = sorted(list(set(emails)))
-
-            return df_dados, emails_unicos
+            return df_dados
         else:
-            st.error(
-                f"Erro ao buscar dados do Power Automate (Código {res.status_code})"
-            )
-            return pd.DataFrame(), []
-    except Exception as e:
-        st.error(f"Falha de conexão com o Power Automate: {e}")
-        return pd.DataFrame(), []
+            return pd.DataFrame()
+    except Exception:
+        return pd.DataFrame()
 
 
-# Obter registros e e-mails do backend
-df_dados_raw, lista_emails_corporativos = carregar_dados_e_usuarios()
-opcoes_emails = [""] + lista_emails_corporativos
+# Obter dados direto do backend
+df_dados = carregar_dados()
 
-# Inicializa ou sincroniza a base local do session_state
-if (
-    "df_dados" not in st.session_state
-    or st.session_state.get("forcar_recarga", False)
-):
-    st.session_state["df_dados"] = df_dados_raw.copy()
-    st.session_state["forcar_recarga"] = False
-
-df_dados = st.session_state["df_dados"]
-
-# --- DIAGNÓSTICO (Visível apenas na barra lateral recolhida) ---
+# --- DIAGNÓSTICO DA CONEXÃO ---
 with st.sidebar.expander("🛠️ Diagnóstico do Sistema"):
-    st.write(f"**E-mails carregados:** {len(lista_emails_corporativos)}")
-    if lista_emails_corporativos:
-        st.caption(
-            ", ".join(lista_emails_corporativos[:5])
-            + ("..." if len(lista_emails_corporativos) > 5 else "")
-        )
+    st.write(f"**Registros carregados:** {len(df_dados)}")
+    if not df_dados.empty:
+        st.write("**Colunas disponíveis:**", list(df_dados.columns))
 
 # --- 5. INTERFACE PRINCIPAL ---
 st.title("🔍 Gemba Walk Digital")
@@ -151,16 +109,7 @@ with aba1:
             impacto = st.text_area("Qual o impacto?")
             causa = st.text_area("Causa aparente?")
             acao_imediata = st.text_area("Ação imediata?")
-
-            if lista_emails_corporativos:
-                responsavel_email = st.selectbox(
-                    "E-mail do Responsável*",
-                    options=opcoes_emails,
-                    help="Digite para filtrar o e-mail corporativo do colaborador.",
-                )
-            else:
-                responsavel_email = st.text_input("E-mail do Responsável*")
-
+            responsavel_email = st.text_input("E-mail do Responsável*")
             prazo = st.date_input("Prazo para Solução", value=date.today())
 
             submitted = st.form_submit_button("Salvar Não Conformidade")
@@ -198,20 +147,13 @@ with aba1:
                     try:
                         res = requests.post(WEBHOOK_CRIAR, json=payload)
                         if res.status_code in [200, 202]:
-                            st.success(
-                                "Não conformidade salva com sucesso no Microsoft Lists!"
-                            )
+                            st.success("Não conformidade salva com sucesso!")
                             st.cache_data.clear()
-                            st.session_state["forcar_recarga"] = True
                             st.rerun()
                         else:
-                            st.error(
-                                f"Erro no Power Automate (Código {res.status_code}): {res.text}"
-                            )
+                            st.error(f"Erro {res.status_code}: {res.text}")
                     except Exception as e:
-                        st.error(
-                            f"Falha de conexão com o Power Automate: {e}"
-                        )
+                        st.error(f"Falha de conexão com o Power Automate: {e}")
     else:
         if st.button("Salvar Conformidade"):
             st.success("Conformidade registrada com sucesso!")
@@ -220,14 +162,13 @@ with aba1:
 with aba2:
     st.subheader("📌 Pendências Ativas (Post-its)")
 
-    if df_dados.empty or "status" not in df_dados.columns:
-        st.info(
-            "Nenhuma pendência encontrada ou aguardando sincronização com a lista."
-        )
+    col_status = next((c for c in df_dados.columns if "status" in c), None)
+
+    if df_dados.empty or not col_status:
+        st.info("Nenhuma pendência encontrada no momento.")
     else:
-        # Tratamento rigoroso da coluna de status
         df_dados["status_clean"] = (
-            df_dados["status"]
+            df_dados[col_status]
             .fillna("")
             .astype(str)
             .str.strip()
@@ -241,10 +182,17 @@ with aba2:
         else:
             cols = st.columns(2)
             for idx, row in pendentes.reset_index().iterrows():
-                item_id = str(row.get("id", ""))
+                item_id = str(
+                    row.get(
+                        "id", row.get("title", row.get("id_unico", f"{idx}"))
+                    )
+                )
+
                 with cols[idx % 2]:
                     with st.container(border=True):
-                        st.markdown(f"### 🟨 {row.get('categoria', 'N/A')}")
+                        st.markdown(
+                            f"### 🟨 {row.get('categoria', 'Não Conformidade')}"
+                        )
                         st.caption(
                             f"**Criado por:** {row.get('auditor', 'N/A')} em {row.get('data_criacao', 'N/A')}"
                         )
@@ -265,12 +213,11 @@ with aba2:
                         if st.button(
                             "✅ Resolvido", key=f"btn_res_{item_id}_{idx}"
                         ):
-                            data_solucao_str = datetime.now().strftime(
-                                "%Y-%m-%d %H:%M:%S"
-                            )
                             payload_sol = {
                                 "id": item_id,
-                                "data_solucao": data_solucao_str,
+                                "data_solucao": datetime.now().strftime(
+                                    "%Y-%m-%d %H:%M:%S"
+                                ),
                             }
                             try:
                                 res_sol = requests.post(
@@ -279,26 +226,12 @@ with aba2:
                                     timeout=10,
                                 )
                                 if res_sol.status_code in [200, 202]:
-                                    # Atualização otimista imediata na memória da aplicação
-                                    mask = (
-                                        st.session_state["df_dados"][
-                                            "id"
-                                        ].astype(str)
-                                        == item_id
-                                    )
-                                    st.session_state["df_dados"].loc[
-                                        mask, "status"
-                                    ] = "Resolvido"
-                                    st.session_state["df_dados"].loc[
-                                        mask, "data_solucao"
-                                    ] = data_solucao_str
-
                                     st.toast("Item resolvido!", icon="✅")
                                     st.cache_data.clear()
                                     st.rerun()
                                 else:
                                     st.error(
-                                        f"Erro ao atualizar status no Power Automate: {res_sol.status_code}"
+                                        f"Erro ao atualizar status: {res_sol.status_code}"
                                     )
                             except Exception as e:
                                 st.error(f"Falha de conexão: {e}")
@@ -307,9 +240,11 @@ with aba2:
 with aba3:
     st.subheader("📊 Indicadores do Gemba Walk")
 
-    if not df_dados.empty and "status" in df_dados.columns:
+    col_status = next((c for c in df_dados.columns if "status" in c), None)
+
+    if not df_dados.empty and col_status:
         status_serie = (
-            df_dados["status"]
+            df_dados[col_status]
             .fillna("")
             .astype(str)
             .str.strip()
@@ -327,7 +262,9 @@ with aba3:
 
         st.divider()
         st.markdown("**Problemas Encontrados por Categoria**")
-        if "categoria" in df_dados.columns:
-            st.bar_chart(df_dados["categoria"].value_counts())
+
+        col_cat = next((c for c in df_dados.columns if "categoria" in c), None)
+        if col_cat:
+            st.bar_chart(df_dados[col_cat].value_counts())
     else:
         st.info("Aguardando registros para exibir indicadores.")
