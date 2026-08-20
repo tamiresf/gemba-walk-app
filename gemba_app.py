@@ -1,4 +1,4 @@
-from datetime import datetime, date
+from datetime import date, datetime
 import uuid
 import pandas as pd
 import requests
@@ -51,34 +51,52 @@ def carregar_dados_e_usuarios():
             dados_json = res.json()
 
             df_dados = pd.DataFrame()
-            usuarios = []
+            usuarios_raw = []
 
+            # 1. Separar registros e usuários vindo do payload JSON
             if isinstance(dados_json, dict):
                 if "dados" in dados_json:
                     df_dados = pd.DataFrame(dados_json.get("dados", []))
                 elif "value" in dados_json:
                     df_dados = pd.DataFrame(dados_json.get("value", []))
 
-                for chave_usr in ["usuarios", "users", "emails", "value"]:
+                # Tenta localizar a chave onde os usuários foram retornados
+                for chave_usr in ["usuarios", "users", "emails"]:
                     if chave_usr in dados_json and isinstance(
                         dados_json[chave_usr], list
                     ):
-                        usuarios = dados_json[chave_usr]
+                        usuarios_raw = dados_json[chave_usr]
                         break
+
+                # Caso a chave 'usuarios' venha envelopada em um objeto 'body/value'
+                if not usuarios_raw and "usuarios" in dados_json:
+                    val = dados_json["usuarios"]
+                    if isinstance(val, dict) and "value" in val:
+                        usuarios_raw = val["value"]
+
             elif isinstance(dados_json, list):
                 df_dados = pd.DataFrame(dados_json)
-                usuarios = dados_json
+                usuarios_raw = dados_json
 
             if not df_dados.empty:
                 df_dados.columns = df_dados.columns.str.strip().str.lower()
 
+            # 2. Extrair e-mails da estrutura 'body/value' da Microsoft
             emails = []
-            if isinstance(usuarios, list):
-                for u in usuarios:
+            if isinstance(usuarios_raw, list):
+                for u in usuarios_raw:
                     if isinstance(u, dict):
-                        for k, v in u.items():
-                            if v and isinstance(v, str) and "@" in v:
-                                emails.append(v.lower().strip())
+                        # Padrão retornado pelo "Buscar Usuários (V2)" do Office 365
+                        email_encontrado = u.get("mail") or u.get(
+                            "userPrincipalName"
+                        )
+                        if email_encontrado and "@" in str(email_encontrado):
+                            emails.append(str(email_encontrado).lower().strip())
+                        else:
+                            # Varredura secundária em outros campos
+                            for k, v in u.items():
+                                if v and isinstance(v, str) and "@" in v:
+                                    emails.append(v.lower().strip())
                     elif isinstance(u, str) and "@" in u:
                         emails.append(u.lower().strip())
 
@@ -225,7 +243,6 @@ with aba2:
             "Nenhuma pendência encontrada ou aguardando sincronização com a lista."
         )
     else:
-        # Tratamento rigoroso da coluna de status
         df_dados["status_clean"] = (
             df_dados["status"]
             .fillna("")
@@ -279,7 +296,6 @@ with aba2:
                                     timeout=10,
                                 )
                                 if res_sol.status_code in [200, 202]:
-                                    # Atualização otimista imediata na memória da aplicação
                                     mask = (
                                         st.session_state["df_dados"][
                                             "id"
