@@ -67,54 +67,39 @@ CATEGORIAS = {
 }
 
 
-# --- 5. FUNÇÃO PARA CARREGAR DADOS DIRETO DO MICROSOFT LISTS ---
-@st.cache_data(ttl=5, show_spinner=False)
-def carregar_dados_lists():
-    headers = {"Accept": "application/json", "Content-Type": "application/json"}
+# --- 5. BUSCAR DADOS REAIS DO MICROSOFT LISTS ---
+@st.cache_data(ttl=2, show_spinner=False)
+def buscar_dados_lists():
     try:
-        res = requests.get(WEBHOOK_LER, headers=headers, timeout=15)
-        if res.status_code == 200:
-            dados_json = res.json()
+        # Tenta requisição POST/GET dependendo do seu fluxo do Power Automate
+        res = requests.get(WEBHOOK_LER, timeout=10)
+        if res.status_code != 200:
+            res = requests.post(WEBHOOK_LER, json={}, timeout=10)
 
-            # Extração defensiva da lista de itens no retorno JSON
-            itens = []
-            if isinstance(dados_json, list):
-                itens = dados_json
-            elif isinstance(dados_json, dict):
-                itens = (
-                    dados_json.get("dados")
-                    or dados_json.get("value")
-                    or dados_json.get("body")
-                    or []
+        if res.status_code in [200, 202]:
+            data = res.json()
+            if isinstance(data, list):
+                df = pd.DataFrame(data)
+            elif isinstance(data, dict):
+                df = pd.DataFrame(
+                    data.get("value", data.get("dados", [data]))
                 )
+            else:
+                df = pd.DataFrame()
 
-            if not itens:
-                return pd.DataFrame()
-
-            df = pd.DataFrame(itens)
-
-            # Padroniza todas as colunas para minúsculo
-            df.columns = df.columns.astype(str).str.strip().str.lower()
-
+            if not df.empty:
+                df.columns = df.columns.astype(str).str.strip().str.lower()
             return df
-        else:
-            return pd.DataFrame()
+        return pd.DataFrame()
     except Exception:
         return pd.DataFrame()
 
 
-# Forçar busca de dados atualizada do Lists
-df_dados = carregar_dados_lists()
+# Executa a busca real no Lists ao carregar o código
+df_dados = buscar_dados_lists()
 
 # --- 6. INTERFACE PRINCIPAL ---
-col_head1, col_head2 = st.columns([4, 1])
-with col_head1:
-    st.title("🔍 Gemba Walk Digital")
-with col_head2:
-    st.write("")
-    if st.button("🔄 Sincronizar Lists"):
-        st.cache_data.clear()
-        st.rerun()
+st.title("🔍 Gemba Walk Digital")
 
 aba1, aba2, aba3 = st.tabs(
     ["📋 Novo Registro", "📌 Quadro de Post-its", "📊 Dashboard"]
@@ -214,15 +199,17 @@ with aba2:
     st.subheader("📌 Pendências Ativas (Post-its)")
 
     if df_dados.empty:
-        st.info("Nenhuma pendência encontrada ou aguardando resposta do Microsoft Lists.")
+        st.info("Nenhuma pendência encontrada no Microsoft Lists.")
     else:
-        # Tenta identificar a coluna de status flexivelmente
+        # Busca flexível por colunas equivalentes do Lists
         col_status = next(
             (c for c in df_dados.columns if "status" in c), None
         )
 
-        if col_status is None:
-            st.warning("A coluna 'Status' não foi encontrada na resposta do Microsoft Lists.")
+        if not col_status:
+            st.warning(
+                "A coluna 'Status' não foi retornada pelo Power Automate."
+            )
         else:
             df_dados["status_clean"] = (
                 df_dados[col_status]
@@ -239,7 +226,9 @@ with aba2:
             else:
                 cols = st.columns(2)
                 for idx, row in pendentes.reset_index().iterrows():
-                    item_id = str(row.get("id", row.get("title", idx)))
+                    item_id = str(
+                        row.get("id", row.get("title", row.get("id_unico", idx)))
+                    )
                     with cols[idx % 2]:
                         with st.container(border=True):
                             st.markdown(
@@ -323,9 +312,5 @@ with aba3:
             )
             if col_cat:
                 st.bar_chart(df_dados[col_cat].value_counts())
-            else:
-                st.info("Coluna de categoria não mapeada no retorno.")
-        else:
-            st.info("Não foi possível processar o status da lista.")
     else:
         st.info("Aguardando registros para exibir indicadores.")
