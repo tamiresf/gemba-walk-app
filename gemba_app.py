@@ -1,4 +1,5 @@
 from datetime import date, datetime
+import time
 import uuid
 import pandas as pd
 import requests
@@ -56,8 +57,9 @@ CATEGORIAS = {
 }
 
 
-# --- 5. FUNÇÃO PARA CARREGAR DADOS ---
-def carregar_dados():
+# --- 5. FUNÇÃO DE BUSCA DE DADOS (COM CACHE DE 5 SEGUNDOS) ---
+@st.cache_data(ttl=5, show_spinner=False)
+def buscar_dados_servidor():
     try:
         res = requests.get(WEBHOOK_LER, timeout=10)
         if res.status_code != 200:
@@ -91,23 +93,25 @@ def carregar_dados():
         return pd.DataFrame()
 
 
-# Armazenar/Carregar dados no session_state para permitir atualizações instantâneas na tela
-if "df_dados" not in st.session_state or st.sidebar.button("🔄 Recarregar Dados"):
-    st.session_state["df_dados"] = carregar_dados()
+# Botão de recarga manual na barra lateral
+with st.sidebar:
+    if st.button("🔄 Recarregar Dados da Nuvem", use_container_width=True):
+        st.cache_data.clear()
+        st.rerun()
 
-df_dados = st.session_state["df_dados"]
+# Buscar dados centralizados
+df_dados = buscar_dados_servidor()
 
-# Normalizar coluna de status para comparação consistente
+# Normalização de colunas
 col_status = next(
     (c for c in df_dados.columns if "status" in c), None
 ) if not df_dados.empty else None
 
-if df_dados is not None and not df_dados.empty and col_status:
+if not df_dados.empty and col_status:
     df_dados["status_clean"] = (
         df_dados[col_status].fillna("").astype(str).str.strip().str.lower()
     )
 
-# Coluna de identificação do ID
 col_id = next(
     (c for c in df_dados.columns if c in ["id", "id_unico", "title"]), None
 ) if not df_dados.empty else None
@@ -196,14 +200,15 @@ with aba1:
                     }
 
                     try:
-                        res = requests.post(WEBHOOK_CRIAR, json=payload)
-                        if res.status_code in [200, 202]:
-                            st.success("Não conformidade salva com sucesso!")
-                            # Força atualização dos dados
-                            st.session_state["df_dados"] = carregar_dados()
-                            st.rerun()
-                        else:
-                            st.error(f"Erro {res.status_code}: {res.text}")
+                        with st.spinner("Salvando na nuvem..."):
+                            res = requests.post(WEBHOOK_CRIAR, json=payload, timeout=10)
+                            if res.status_code in [200, 202]:
+                                time.sleep(2)  # Pausa para o Power Automate processar
+                                st.cache_data.clear()
+                                st.success("Não conformidade salva com sucesso!")
+                                st.rerun()
+                            else:
+                                st.error(f"Erro {res.status_code}: {res.text}")
                     except Exception as e:
                         st.error(f"Falha de conexão com o Power Automate: {e}")
             else:
@@ -216,7 +221,7 @@ with aba2:
     if df_dados.empty or "status_clean" not in df_dados.columns:
         st.info("Nenhuma pendência encontrada no momento.")
     else:
-        # Filtra registros com status 'pendente'
+        # Filtra estritamente tudo que tem status_clean como 'pendente'
         pendentes = df_dados[df_dados["status_clean"] == "pendente"]
 
         if pendentes.empty:
@@ -259,27 +264,25 @@ with aba2:
                                 ),
                             }
                             try:
-                                # 1. Atualizar instantaneamente no estado local (para refletir na tela na hora)
-                                if col_status:
-                                    st.session_state["df_dados"].at[
-                                        original_idx, col_status
-                                    ] = "Resolvido"
-                                    st.session_state["df_dados"].at[
-                                        original_idx, "status_clean"
-                                    ] = "resolvido"
-
-                                # 2. Disparar atualização assíncrona no Power Automate
-                                requests.post(
-                                    WEBHOOK_RESOLVER,
-                                    json=payload_sol,
-                                    timeout=5,
-                                )
-
-                                st.toast("Item resolvido com sucesso!", icon="✅")
-                                st.rerun()
-
+                                with st.spinner("Atualizando banco de dados..."):
+                                    # Envia a requisição de resolução
+                                    res_sol = requests.post(
+                                        WEBHOOK_RESOLVER,
+                                        json=payload_sol,
+                                        timeout=10,
+                                    )
+                                    if res_sol.status_code in [200, 202]:
+                                        # Pausa estratégica para dar tempo do Power Automate atualizar o Excel/SharePoint
+                                        time.sleep(2.5)
+                                        
+                                        # Limpa o cache global para que TODOS os dispositivos vejam a alteração
+                                        st.cache_data.clear()
+                                        st.toast("Item marcado como resolvido na nuvem!", icon="✅")
+                                        st.rerun()
+                                    else:
+                                        st.error(f"Erro do servidor: {res_sol.status_code}")
                             except Exception as e:
-                                st.error(f"Falha ao comunicar envio: {e}")
+                                st.error(f"Falha de conexão com a nuvem: {e}")
 
 # --- ABA 3: DASHBOARD ---
 with aba3:
