@@ -1,4 +1,5 @@
 from datetime import date, datetime
+import time
 import uuid
 import pandas as pd
 import requests
@@ -17,7 +18,7 @@ WEBHOOK_CRIAR = st.secrets.get("POWER_AUTOMATE_CRIAR_URL", "")
 WEBHOOK_RESOLVER = st.secrets.get("POWER_AUTOMATE_RESOLVER_URL", "")
 WEBHOOK_LER = st.secrets.get("POWER_AUTOMATE_LER_URL", "")
 
-# --- 3. LISTA FIXA DE E-MAILS (COM AUTOCOMPLETE) ---
+# --- 3. LISTA FIXA DE E-MAILS ---
 EMAILS_CORPORATIVOS = sorted(
     list(
         set([
@@ -94,6 +95,13 @@ def carregar_dados():
 
 # Obter dados direto do backend
 df_dados = carregar_dados()
+
+# Normalizar coluna de status em minúsculo para evitar bugs de comparação
+col_status = next((c for c in df_dados.columns if "status" in c), None)
+if not df_dados.empty and col_status:
+    df_dados["status_clean"] = (
+        df_dados[col_status].fillna("").astype(str).str.strip().str.lower()
+    )
 
 # --- DIAGNÓSTICO DA CONEXÃO ---
 with st.sidebar.expander("🛠️ Diagnóstico do Sistema"):
@@ -182,6 +190,7 @@ with aba1:
                         res = requests.post(WEBHOOK_CRIAR, json=payload)
                         if res.status_code in [200, 202]:
                             st.success("Não conformidade salva com sucesso!")
+                            time.sleep(1)
                             st.cache_data.clear()
                             st.rerun()
                         else:
@@ -195,20 +204,11 @@ with aba1:
 with aba2:
     st.subheader("📌 Pendências Ativas (Post-its)")
 
-    col_status = next((c for c in df_dados.columns if "status" in c), None)
-
-    if df_dados.empty or not col_status:
+    if df_dados.empty or "status_clean" not in df_dados.columns:
         st.info("Nenhuma pendência encontrada no momento.")
     else:
-        df_dados["status_clean"] = (
-            df_dados[col_status]
-            .fillna("")
-            .astype(str)
-            .str.strip()
-            .str.capitalize()
-        )
-
-        pendentes = df_dados[df_dados["status_clean"] == "Pendente"]
+        # Filtra estritamente tudo que for minúsculo 'pendente'
+        pendentes = df_dados[df_dados["status_clean"] == "pendente"]
 
         if pendentes.empty:
             st.success("🎉 Nenhuma pendência aberta no momento!")
@@ -248,6 +248,7 @@ with aba2:
                         ):
                             payload_sol = {
                                 "id": item_id,
+                                "status": "Resolvido",
                                 "data_solucao": datetime.now().strftime(
                                     "%Y-%m-%d %H:%M:%S"
                                 ),
@@ -260,6 +261,8 @@ with aba2:
                                 )
                                 if res_sol.status_code in [200, 202]:
                                     st.toast("Item resolvido!", icon="✅")
+                                    # Pausa necessária para dar tempo do Power Automate atualizar o backend
+                                    time.sleep(1.5)
                                     st.cache_data.clear()
                                     st.rerun()
                                 else:
@@ -273,20 +276,10 @@ with aba2:
 with aba3:
     st.subheader("📊 Indicadores do Gemba Walk")
 
-    col_status = next((c for c in df_dados.columns if "status" in c), None)
-
-    if not df_dados.empty and col_status:
-        status_serie = (
-            df_dados[col_status]
-            .fillna("")
-            .astype(str)
-            .str.strip()
-            .str.capitalize()
-        )
-
+    if not df_dados.empty and "status_clean" in df_dados.columns:
         total_registros = len(df_dados)
-        qtd_pendentes = (status_serie == "Pendente").sum()
-        qtd_resolvidos = (status_serie == "Resolvido").sum()
+        qtd_pendentes = (df_dados["status_clean"] == "pendente").sum()
+        qtd_resolvidos = (df_dados["status_clean"] == "resolvido").sum()
 
         c1, c2, c3 = st.columns(3)
         c1.metric("Total de Registros", total_registros)
