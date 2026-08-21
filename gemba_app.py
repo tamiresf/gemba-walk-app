@@ -1,5 +1,4 @@
 from datetime import date, datetime
-import time
 import uuid
 import pandas as pd
 import requests
@@ -57,8 +56,7 @@ CATEGORIAS = {
 }
 
 
-# --- 5. FUNÇÃO PARA CARREGAR DADOS DO POWER AUTOMATE ---
-@st.cache_data(ttl=5, show_spinner=False)
+# --- 5. FUNÇÃO PARA CARREGAR DADOS ---
 def carregar_dados():
     try:
         res = requests.get(WEBHOOK_LER, timeout=10)
@@ -93,15 +91,26 @@ def carregar_dados():
         return pd.DataFrame()
 
 
-# Obter dados direto do backend
-df_dados = carregar_dados()
+# Armazenar/Carregar dados no session_state para permitir atualizações instantâneas na tela
+if "df_dados" not in st.session_state or st.sidebar.button("🔄 Recarregar Dados"):
+    st.session_state["df_dados"] = carregar_dados()
 
-# Normalizar coluna de status em minúsculo para evitar bugs de comparação
-col_status = next((c for c in df_dados.columns if "status" in c), None)
-if not df_dados.empty and col_status:
+df_dados = st.session_state["df_dados"]
+
+# Normalizar coluna de status para comparação consistente
+col_status = next(
+    (c for c in df_dados.columns if "status" in c), None
+) if not df_dados.empty else None
+
+if df_dados is not None and not df_dados.empty and col_status:
     df_dados["status_clean"] = (
         df_dados[col_status].fillna("").astype(str).str.strip().str.lower()
     )
+
+# Coluna de identificação do ID
+col_id = next(
+    (c for c in df_dados.columns if c in ["id", "id_unico", "title"]), None
+) if not df_dados.empty else None
 
 # --- DIAGNÓSTICO DA CONEXÃO ---
 with st.sidebar.expander("🛠️ Diagnóstico do Sistema"):
@@ -190,8 +199,8 @@ with aba1:
                         res = requests.post(WEBHOOK_CRIAR, json=payload)
                         if res.status_code in [200, 202]:
                             st.success("Não conformidade salva com sucesso!")
-                            time.sleep(1)
-                            st.cache_data.clear()
+                            # Força atualização dos dados
+                            st.session_state["df_dados"] = carregar_dados()
                             st.rerun()
                         else:
                             st.error(f"Erro {res.status_code}: {res.text}")
@@ -207,19 +216,15 @@ with aba2:
     if df_dados.empty or "status_clean" not in df_dados.columns:
         st.info("Nenhuma pendência encontrada no momento.")
     else:
-        # Filtra estritamente tudo que for minúsculo 'pendente'
+        # Filtra registros com status 'pendente'
         pendentes = df_dados[df_dados["status_clean"] == "pendente"]
 
         if pendentes.empty:
             st.success("🎉 Nenhuma pendência aberta no momento!")
         else:
             cols = st.columns(2)
-            for idx, row in pendentes.reset_index().iterrows():
-                item_id = str(
-                    row.get(
-                        "id", row.get("title", row.get("id_unico", f"{idx}"))
-                    )
-                )
+            for idx, (original_idx, row) in enumerate(pendentes.iterrows()):
+                item_id = str(row.get(col_id, f"{idx}")) if col_id else str(idx)
 
                 with cols[idx % 2]:
                     with st.container(border=True):
@@ -244,7 +249,7 @@ with aba2:
                         st.write(f"**Prazo:** {row.get('prazo', '')}")
 
                         if st.button(
-                            "✅ Resolvido", key=f"btn_res_{item_id}_{idx}"
+                            "✅ Resolvido", key=f"btn_res_{item_id}_{original_idx}"
                         ):
                             payload_sol = {
                                 "id": item_id,
@@ -254,23 +259,27 @@ with aba2:
                                 ),
                             }
                             try:
-                                res_sol = requests.post(
+                                # 1. Atualizar instantaneamente no estado local (para refletir na tela na hora)
+                                if col_status:
+                                    st.session_state["df_dados"].at[
+                                        original_idx, col_status
+                                    ] = "Resolvido"
+                                    st.session_state["df_dados"].at[
+                                        original_idx, "status_clean"
+                                    ] = "resolvido"
+
+                                # 2. Disparar atualização assíncrona no Power Automate
+                                requests.post(
                                     WEBHOOK_RESOLVER,
                                     json=payload_sol,
-                                    timeout=10,
+                                    timeout=5,
                                 )
-                                if res_sol.status_code in [200, 202]:
-                                    st.toast("Item resolvido!", icon="✅")
-                                    # Pausa necessária para dar tempo do Power Automate atualizar o backend
-                                    time.sleep(1.5)
-                                    st.cache_data.clear()
-                                    st.rerun()
-                                else:
-                                    st.error(
-                                        f"Erro ao atualizar status: {res_sol.status_code}"
-                                    )
+
+                                st.toast("Item resolvido com sucesso!", icon="✅")
+                                st.rerun()
+
                             except Exception as e:
-                                st.error(f"Falha de conexão: {e}")
+                                st.error(f"Falha ao comunicar envio: {e}")
 
 # --- ABA 3: DASHBOARD ---
 with aba3:
