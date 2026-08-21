@@ -57,8 +57,8 @@ CATEGORIAS = {
 }
 
 
-# --- 5. FUNÇÃO DE BUSCA DE DADOS (COM CACHE DE 5 SEGUNDOS) ---
-@st.cache_data(ttl=5, show_spinner=False)
+# --- 5. FUNÇÃO PARA CARREGAR DADOS ---
+@st.cache_data(ttl=2, show_spinner=False)
 def buscar_dados_servidor():
     try:
         res = requests.get(WEBHOOK_LER, timeout=10)
@@ -82,6 +82,7 @@ def buscar_dados_servidor():
                     df_dados = pd.DataFrame([dados_json])
 
             if not df_dados.empty:
+                # Padronizar nomes das colunas
                 df_dados.columns = (
                     df_dados.columns.astype(str).str.strip().str.lower()
                 )
@@ -93,16 +94,15 @@ def buscar_dados_servidor():
         return pd.DataFrame()
 
 
-# Botão de recarga manual na barra lateral
+# Botão lateral para atualizar manualmente
 with st.sidebar:
-    if st.button("🔄 Recarregar Dados da Nuvem", use_container_width=True):
+    if st.button("🔄 Atualizar Dados", use_container_width=True):
         st.cache_data.clear()
         st.rerun()
 
-# Buscar dados centralizados
 df_dados = buscar_dados_servidor()
 
-# Normalização de colunas
+# Identificar a coluna de status na lista
 col_status = next(
     (c for c in df_dados.columns if "status" in c), None
 ) if not df_dados.empty else None
@@ -112,15 +112,16 @@ if not df_dados.empty and col_status:
         df_dados[col_status].fillna("").astype(str).str.strip().str.lower()
     )
 
+# Identificar a coluna de ID primária (do SharePoint ou id customizado)
 col_id = next(
     (c for c in df_dados.columns if c in ["id", "id_unico", "title"]), None
 ) if not df_dados.empty else None
 
 # --- DIAGNÓSTICO DA CONEXÃO ---
 with st.sidebar.expander("🛠️ Diagnóstico do Sistema"):
-    st.write(f"**Registros carregados:** {len(df_dados)}")
+    st.write(f"**Registros no Microsoft Lists:** {len(df_dados)}")
     if not df_dados.empty:
-        st.write("**Colunas disponíveis:**", list(df_dados.columns))
+        st.write("**Colunas mapeadas:**", list(df_dados.columns))
 
 # --- 6. INTERFACE PRINCIPAL ---
 st.title("🔍 Gemba Walk Digital")
@@ -200,10 +201,10 @@ with aba1:
                     }
 
                     try:
-                        with st.spinner("Salvando na nuvem..."):
+                        with st.spinner("Gravando no Microsoft Lists..."):
                             res = requests.post(WEBHOOK_CRIAR, json=payload, timeout=10)
                             if res.status_code in [200, 202]:
-                                time.sleep(2)  # Pausa para o Power Automate processar
+                                time.sleep(2)
                                 st.cache_data.clear()
                                 st.success("Não conformidade salva com sucesso!")
                                 st.rerun()
@@ -221,7 +222,7 @@ with aba2:
     if df_dados.empty or "status_clean" not in df_dados.columns:
         st.info("Nenhuma pendência encontrada no momento.")
     else:
-        # Filtra estritamente tudo que tem status_clean como 'pendente'
+        # Filtra estritamente tudo com status 'pendente'
         pendentes = df_dados[df_dados["status_clean"] == "pendente"]
 
         if pendentes.empty:
@@ -229,7 +230,8 @@ with aba2:
         else:
             cols = st.columns(2)
             for idx, (original_idx, row) in enumerate(pendentes.iterrows()):
-                item_id = str(row.get(col_id, f"{idx}")) if col_id else str(idx)
+                # Obtém o ID do item
+                item_id = str(row.get(col_id)) if col_id and pd.notna(row.get(col_id)) else str(idx)
 
                 with cols[idx % 2]:
                     with st.container(border=True):
@@ -237,7 +239,7 @@ with aba2:
                             f"### 🟨 {row.get('categoria', 'Não Conformidade')}"
                         )
                         st.caption(
-                            f"**Criado por:** {row.get('auditor', 'N/A')} em {row.get('data_criacao', 'N/A')}"
+                            f"**ID:** `{item_id}` | **Criado por:** {row.get('auditor', 'N/A')}"
                         )
                         st.write(
                             f"**Local:** {row.get('estacao', '')} - {row.get('local', '')}"
@@ -264,25 +266,24 @@ with aba2:
                                 ),
                             }
                             try:
-                                with st.spinner("Atualizando banco de dados..."):
-                                    # Envia a requisição de resolução
+                                with st.spinner(f"Atualizando item {item_id} no Microsoft Lists..."):
                                     res_sol = requests.post(
                                         WEBHOOK_RESOLVER,
                                         json=payload_sol,
                                         timeout=10,
                                     )
                                     if res_sol.status_code in [200, 202]:
-                                        # Pausa estratégica para dar tempo do Power Automate atualizar o Excel/SharePoint
-                                        time.sleep(2.5)
-                                        
-                                        # Limpa o cache global para que TODOS os dispositivos vejam a alteração
+                                        # Tempo para o SharePoint processar
+                                        time.sleep(3)
                                         st.cache_data.clear()
-                                        st.toast("Item marcado como resolvido na nuvem!", icon="✅")
+                                        st.toast("Status alterado para Resolvido no Lists!", icon="✅")
                                         st.rerun()
                                     else:
-                                        st.error(f"Erro do servidor: {res_sol.status_code}")
+                                        st.error(
+                                            f"Erro retornado pelo Power Automate: {res_sol.status_code}"
+                                        )
                             except Exception as e:
-                                st.error(f"Falha de conexão com a nuvem: {e}")
+                                st.error(f"Falha de conexão: {e}")
 
 # --- ABA 3: DASHBOARD ---
 with aba3:
