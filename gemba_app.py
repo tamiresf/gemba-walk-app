@@ -14,9 +14,9 @@ st.set_page_config(
 )
 
 # --- 2. CARREGAR URLs DOS SECRETS ---
-WEBHOOK_CRIAR = st.secrets.get("POWER_AUTOMATE_CRIAR_URL", "")
-WEBHOOK_RESOLVER = st.secrets.get("POWER_AUTOMATE_RESOLVER_URL", "")
-WEBHOOK_LER = st.secrets.get("POWER_AUTOMATE_LER_URL", "")
+WEBHOOK_CRIAR = st.secrets.get("POWER_AUTOMATE_CRIAR_URL", "https://defaultcd14821755e24b4e86f837f80bf5ae.f3.environment.api.powerplatform.com:443/powerautomate/automations/direct/cu/08/workflows/24e560b839864d9b91720231dbb6584e/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=cZEo_aNlKwbk9kP84Yu_OITxnl6wZqrM-RCGjOZXzss")
+WEBHOOK_RESOLVER = st.secrets.get("POWER_AUTOMATE_RESOLVER_URL", "https://defaultcd14821755e24b4e86f837f80bf5ae.f3.environment.api.powerplatform.com:443/powerautomate/automations/direct/cu/06/workflows/a1df9787e2b94d19ab5643e165491bc8/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=yLF9HKRO6XtG75qHGA_U7X1g-NMCcnT4QHGXPdUkiFA")
+WEBHOOK_LER = st.secrets.get("POWER_AUTOMATE_LER_URL", "https://defaultcd14821755e24b4e86f837f80bf5ae.f3.environment.api.powerplatform.com:443/powerautomate/automations/direct/cu/27/workflows/62a264c57b214336aa6205ae2fb47c59/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=JJ2EZPMarOKgpxHQNzHh0ZR7N5LKtQ53eEO1wB-eePM")
 
 # --- 3. LISTA FIXA DE E-MAILS ---
 EMAILS_CORPORATIVOS = sorted(
@@ -98,9 +98,14 @@ def buscar_dados_servidor():
 with st.sidebar:
     if st.button("🔄 Atualizar Dados", use_container_width=True):
         st.cache_data.clear()
+        st.session_state.pop("df_override", None)
         st.rerun()
 
-df_dados = buscar_dados_servidor()
+# Inicialização de dados
+if "df_override" in st.session_state:
+    df_dados = st.session_state["df_override"]
+else:
+    df_dados = buscar_dados_servidor()
 
 # Identificar a coluna de status na lista
 col_status = next(
@@ -112,9 +117,9 @@ if not df_dados.empty and col_status:
         df_dados[col_status].fillna("").astype(str).str.strip().str.lower()
     )
 
-# Identificar a coluna de ID primária (do SharePoint ou id customizado)
+# Identificar a coluna de ID primária (do SharePoint/Lists ou id customizado)
 col_id = next(
-    (c for c in df_dados.columns if c in ["id", "id_unico", "title"]), None
+    (c for c in df_dados.columns if c in ["id0", "id_unico", "id", "title"]), None
 ) if not df_dados.empty else None
 
 # --- DIAGNÓSTICO DA CONEXÃO ---
@@ -122,6 +127,8 @@ with st.sidebar.expander("🛠️ Diagnóstico do Sistema"):
     st.write(f"**Registros no Microsoft Lists:** {len(df_dados)}")
     if not df_dados.empty:
         st.write("**Colunas mapeadas:**", list(df_dados.columns))
+        st.write(f"**Coluna ID identificada:** `{col_id}`")
+        st.write(f"**Coluna Status identificada:** `{col_status}`")
 
 # --- 6. INTERFACE PRINCIPAL ---
 st.title("🔍 Gemba Walk Digital")
@@ -206,6 +213,7 @@ with aba1:
                             if res.status_code in [200, 202]:
                                 time.sleep(2)
                                 st.cache_data.clear()
+                                st.session_state.pop("df_override", None)
                                 st.success("Não conformidade salva com sucesso!")
                                 st.rerun()
                             else:
@@ -222,7 +230,7 @@ with aba2:
     if df_dados.empty or "status_clean" not in df_dados.columns:
         st.info("Nenhuma pendência encontrada no momento.")
     else:
-        # Filtra estritamente tudo com status 'pendente'
+        # Filtra estritamente registros pendentes
         pendentes = df_dados[df_dados["status_clean"] == "pendente"]
 
         if pendentes.empty:
@@ -230,7 +238,7 @@ with aba2:
         else:
             cols = st.columns(2)
             for idx, (original_idx, row) in enumerate(pendentes.iterrows()):
-                # Obtém o ID do item
+                # Obtém o ID do registro
                 item_id = str(row.get(col_id)) if col_id and pd.notna(row.get(col_id)) else str(idx)
 
                 with cols[idx % 2]:
@@ -266,17 +274,20 @@ with aba2:
                                 ),
                             }
                             try:
-                                with st.spinner(f"Atualizando item {item_id} no Microsoft Lists..."):
+                                with st.spinner(f"Atualizando item {item_id}..."):
                                     res_sol = requests.post(
                                         WEBHOOK_RESOLVER,
                                         json=payload_sol,
                                         timeout=10,
                                     )
                                     if res_sol.status_code in [200, 202]:
-                                        # Tempo para o SharePoint processar
-                                        time.sleep(3)
+                                        # Atualiza imediatamente o estado local para sumir na hora do post-it
+                                        df_dados.loc[original_idx, col_status] = "Resolvido"
+                                        df_dados.loc[original_idx, "status_clean"] = "resolvido"
+                                        st.session_state["df_override"] = df_dados
+                                        
                                         st.cache_data.clear()
-                                        st.toast("Status alterado para Resolvido no Lists!", icon="✅")
+                                        st.toast("Item marcado como Resolvido!", icon="✅")
                                         st.rerun()
                                     else:
                                         st.error(
