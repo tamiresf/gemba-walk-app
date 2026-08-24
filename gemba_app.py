@@ -14,9 +14,9 @@ st.set_page_config(
 )
 
 # --- 2. CARREGAR URLs DOS SECRETS ---
-WEBHOOK_CRIAR = st.secrets.get("POWER_AUTOMATE_CRIAR_URL", "")
-WEBHOOK_RESOLVER = st.secrets.get("POWER_AUTOMATE_RESOLVER_URL", "")
-WEBHOOK_LER = st.secrets.get("POWER_AUTOMATE_LER_URL", "")
+WEBHOOK_CRIAR = st.secrets.get("POWER_AUTOMATE_CRIAR_URL", "https://defaultcd14821755e24b4e86f837f80bf5ae.f3.environment.api.powerplatform.com:443/powerautomate/automations/direct/cu/08/workflows/24e560b839864d9b91720231dbb6584e/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=cZEo_aNlKwbk9kP84Yu_OITxnl6wZqrM-RCGjOZXzss")
+WEBHOOK_RESOLVER = st.secrets.get("POWER_AUTOMATE_RESOLVER_URL", "https://defaultcd14821755e24b4e86f837f80bf5ae.f3.environment.api.powerplatform.com:443/powerautomate/automations/direct/cu/06/workflows/a1df9787e2b94d19ab5643e165491bc8/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=yLF9HKRO6XtG75qHGA_U7X1g-NMCcnT4QHGXPdUkiFA")
+WEBHOOK_LER = st.secrets.get("POWER_AUTOMATE_LER_URL", "https://defaultcd14821755e24b4e86f837f80bf5ae.f3.environment.api.powerplatform.com:443/powerautomate/automations/direct/cu/27/workflows/62a264c57b214336aa6205ae2fb47c59/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=JJ2EZPMarOKgpxHQNzHh0ZR7N5LKtQ53eEO1wB-eePM")
 
 # --- 3. LISTA FIXA DE E-MAILS ---
 EMAILS_CORPORATIVOS = sorted(
@@ -82,7 +82,7 @@ def buscar_dados_servidor():
                     df_dados = pd.DataFrame([dados_json])
 
             if not df_dados.empty:
-                # Padronizar nomes das colunas
+                # Padronizar nomes das colunas mantendo os originais intactos no df
                 df_dados.columns = (
                     df_dados.columns.astype(str).str.strip().str.lower()
                 )
@@ -107,7 +107,7 @@ if "df_override" in st.session_state:
 else:
     df_dados = buscar_dados_servidor()
 
-# Identificar a coluna de status na lista
+# Identificar a coluna de status
 col_status = next(
     (c for c in df_dados.columns if "status" in c), None
 ) if not df_dados.empty else None
@@ -117,18 +117,23 @@ if not df_dados.empty and col_status:
         df_dados[col_status].fillna("").astype(str).str.strip().str.lower()
     )
 
-# Garantir a prioridade da busca pelo ID 'id0'
-col_id = next(
-    (c for c in df_dados.columns if c in ["id0", "id_unico", "id", "title"]), None
+# Identificar colunas de ID (Tanto 'id0' quanto o 'id' do SharePoint)
+col_id0 = next(
+    (c for c in df_dados.columns if c == "id0"), None
+) if not df_dados.empty else None
+
+col_sp_id = next(
+    (c for c in df_dados.columns if c in ["id", "id_unico", "title"]), None
 ) if not df_dados.empty else None
 
 # --- DIAGNÓSTICO DA CONEXÃO ---
 with st.sidebar.expander("🛠️ Diagnóstico do Sistema"):
     st.write(f"**Registros no Microsoft Lists:** {len(df_dados)}")
     if not df_dados.empty:
-        st.write("**Colunas mapeadas:**", list(df_dados.columns))
-        st.write(f"**Coluna ID identificada:** `{col_id}`")
-        st.write(f"**Coluna Status identificada:** `{col_status}`")
+        st.write("**Colunas no DataFrame:**", list(df_dados.columns))
+        st.write(f"**Coluna ID0 Mapeada:** `{col_id0}`")
+        st.write(f"**Coluna ID SharePoint Mapeada:** `{col_sp_id}`")
+        st.write(f"**Coluna Status Mapeada:** `{col_status}`")
 
 # --- 6. INTERFACE PRINCIPAL ---
 st.title("🔍 Gemba Walk Digital")
@@ -189,8 +194,8 @@ with aba1:
                     id_unico = str(uuid.uuid4())[:8]
 
                     payload = {
-                        "id": str(id_unico),
                         "id0": str(id_unico),
+                        "id": str(id_unico),
                         "auditor": str(auditor),
                         "data_criacao": datetime.now().strftime(
                             "%Y-%m-%d %H:%M:%S"
@@ -238,7 +243,12 @@ with aba2:
         else:
             cols = st.columns(2)
             for idx, (original_idx, row) in enumerate(pendentes.iterrows()):
-                item_id = str(row.get(col_id)) if col_id and pd.notna(row.get(col_id)) else str(idx)
+                # Tenta capturar id0 primeiro; caso nulo, pega a coluna id alternativa
+                val_id0 = str(row.get(col_id0)) if col_id0 and pd.notna(row.get(col_id0)) else None
+                val_sp_id = str(row.get(col_sp_id)) if col_sp_id and pd.notna(row.get(col_sp_id)) else str(idx)
+                
+                # Exibição
+                display_id = val_id0 if val_id0 else val_sp_id
 
                 with cols[idx % 2]:
                     with st.container(border=True):
@@ -246,7 +256,7 @@ with aba2:
                             f"### 🟨 {row.get('categoria', 'Não Conformidade')}"
                         )
                         st.caption(
-                            f"**ID:** `{item_id}` | **Criado por:** {row.get('auditor', 'N/A')}"
+                            f"**ID:** `{display_id}` | **Criado por:** {row.get('auditor', 'N/A')}"
                         )
                         st.write(
                             f"**Local:** {row.get('estacao', '')} - {row.get('local', '')}"
@@ -263,24 +273,26 @@ with aba2:
                         st.write(f"**Prazo:** {row.get('prazo', '')}")
 
                         if st.button(
-                            "✅ Resolvido", key=f"btn_res_{item_id}_{original_idx}"
+                            "✅ Resolvido", key=f"btn_res_{display_id}_{original_idx}"
                         ):
-                            # Enviamos id0 e id para garantir compatibilidade no Power Automate
+                            # Monta payload completo cobrindo todas as variações conhecidas de schema do Power Automate
                             payload_sol = {
-                                "id0": item_id,
-                                "id": item_id,
+                                "id0": val_id0 if val_id0 else val_sp_id,
+                                "id": val_sp_id,
+                                "ID": val_sp_id,
                                 "status": "Resolvido",
-                                "data_solucao": datetime.now().strftime(
-                                    "%Y-%m-%d %H:%M:%S"
-                                ),
+                                "Status": "Resolvido",
+                                "data_solucao": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                             }
+                            
                             try:
-                                with st.spinner(f"Atualizando item {item_id}..."):
+                                with st.spinner(f"Enviando atualização para o Power Automate..."):
                                     res_sol = requests.post(
                                         WEBHOOK_RESOLVER,
                                         json=payload_sol,
                                         timeout=10,
                                     )
+                                    
                                     if res_sol.status_code in [200, 202]:
                                         if col_status:
                                             df_dados.loc[original_idx, col_status] = "Resolvido"
@@ -292,10 +304,10 @@ with aba2:
                                         st.rerun()
                                     else:
                                         st.error(
-                                            f"Erro retornado pelo Power Automate: {res_sol.status_code}"
+                                            f"Erro Power Automate ({res_sol.status_code}): {res_sol.text}"
                                         )
                             except Exception as e:
-                                st.error(f"Falha de conexão: {e}")
+                                st.error(f"Falha de conexão com a API: {e}")
 
 # --- ABA 3: DASHBOARD ---
 with aba3:
