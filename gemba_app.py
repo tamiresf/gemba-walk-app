@@ -27,6 +27,10 @@ WEBHOOK_LER = st.secrets.get(
     "https://defaultcd14821755e24b4e86f837f80bf5ae.f3.environment.api.powerplatform.com:443/powerautomate/automations/direct/cu/27/workflows/62a264c57b214336aa6205ae2fb47c59/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=JJ2EZPMarOKgpxHQNzHh0ZR7N5LKtQ53eEO1wB-eePM",
 )
 
+# NOVO WEBHOOK PARA SALVAR E LER ROTINAS
+WEBHOOK_ROTINAS_CRIAR = st.secrets.get("POWER_AUTOMATE_ROTINAS_CRIAR_URL", "")
+WEBHOOK_ROTINAS_LER = st.secrets.get("POWER_AUTOMATE_ROTINAS_LER_URL", "")
+
 # --- 3. LISTAS FIXAS ---
 EMAILS_CORPORATIVOS = sorted(
     list(
@@ -75,6 +79,16 @@ AUDITORES_GESTORES = sorted(
     )
 )
 
+DIAS_SEMANA = [
+    "Segunda-feira",
+    "Terça-feira",
+    "Quarta-feira",
+    "Quinta-feira",
+    "Sexta-feira",
+    "Sábado",
+    "Domingo",
+]
+
 # --- 4. CATEGORIAS DA INSPEÇÃO ---
 CATEGORIAS = {
     "Segurança": "EPIs, máquinas, proteções, riscos, circulação",
@@ -89,7 +103,7 @@ CATEGORIAS = {
 }
 
 
-# --- 5. FUNÇÃO PARA CARREGAR DADOS ---
+# --- 5. FUNÇÕES PARA CARREGAR DADOS ---
 @st.cache_data(ttl=2, show_spinner=False)
 def buscar_dados_servidor():
     try:
@@ -125,6 +139,44 @@ def buscar_dados_servidor():
         return pd.DataFrame()
 
 
+@st.cache_data(ttl=5, show_spinner=False)
+def buscar_rotinas_servidor():
+    if not WEBHOOK_ROTINAS_LER:
+        # Retorna lista guardada na sessão para testes se não houver webhook configurado
+        return st.session_state.get("rotinas_local", pd.DataFrame())
+    try:
+        res = requests.get(WEBHOOK_ROTINAS_LER, timeout=15)
+        if res.status_code != 200:
+            res = requests.post(WEBHOOK_ROTINAS_LER, json={}, timeout=15)
+
+        if res.status_code in [200, 202]:
+            dados_json = res.json()
+            df_rotinas = pd.DataFrame()
+
+            if isinstance(dados_json, list):
+                df_rotinas = pd.DataFrame(dados_json)
+            elif isinstance(dados_json, dict):
+                for chave in ["value", "dados", "items", "body"]:
+                    if chave in dados_json and isinstance(
+                        dados_json[chave], list
+                    ):
+                        df_rotinas = pd.DataFrame(dados_json[chave])
+                        break
+                if df_rotinas.empty:
+                    df_rotinas = pd.DataFrame([dados_json])
+
+            if not df_rotinas.empty:
+                df_rotinas.columns = (
+                    df_rotinas.columns.astype(str).str.strip().str.lower()
+                )
+
+            return df_rotinas
+        else:
+            return pd.DataFrame()
+    except Exception:
+        return pd.DataFrame()
+
+
 # Botão lateral para atualizar manualmente
 with st.sidebar:
     if st.button("🔄 Atualizar Dados", use_container_width=True):
@@ -137,6 +189,8 @@ if "df_override" in st.session_state:
     df_dados = st.session_state["df_override"]
 else:
     df_dados = buscar_dados_servidor()
+
+df_rotinas = buscar_rotinas_servidor()
 
 # Identificar a coluna de status
 col_status = (
@@ -163,24 +217,14 @@ col_sp_id = (
     else None
 )
 
-# --- DIAGNÓSTICO DA CONEXÃO ---
-with st.sidebar.expander("🛠️ Diagnóstico do Sistema"):
-    st.write(f"**Registros no Microsoft Lists:** {len(df_dados)}")
-    if not df_dados.empty:
-        st.write("**Colunas no DataFrame:**", list(df_dados.columns))
-        st.write(f"**Coluna ID0 Mapeada:** `{col_id0}`")
-        st.write(f"**Coluna ID SharePoint Mapeada:** `{col_sp_id}`")
-        st.write(f"**Coluna Status Mapeada:** `{col_status}`")
-
 # --- 6. INTERFACE PRINCIPAL ---
 st.title("🔍 Gemba Walk Digital")
-aba1, aba2, aba3 = st.tabs(
-    ["📋 Novo Registro", "📌 Quadro de Post-its", "📊 Dashboard"]
+aba1, aba2, aba3, aba4 = st.tabs(
+    ["📋 Novo Registro", "📌 Quadro de Post-its", "📅 Rotinas", "📊 Dashboard"]
 )
 
 # --- ABA 1: NOVO REGISTRO ---
 with aba1:
-    # 1. Seleção de Status fora do form para reexecução imediata do script
     status_op = st.radio(
         "Status da Inspeção*",
         ["Conforme", "Não Conforme"],
@@ -190,7 +234,6 @@ with aba1:
 
     st.divider()
 
-    # 2. Formulário principal
     with st.form("form_novo_registro", clear_on_submit=True):
         st.subheader("Informações Gerais")
         col1, col2 = st.columns(2)
@@ -211,7 +254,6 @@ with aba1:
         )
         st.info(f"💡 **O que observar:** {CATEGORIAS[categoria_sel]}")
 
-        # 3. Exibir campos adicionais apenas se for "Não Conforme"
         if status_op == "Não Conforme":
             st.divider()
             st.markdown("**Detalhes da Inspeção**")
@@ -240,7 +282,6 @@ with aba1:
                     help="⚠️ DEFINA UM PRAZO ACORDADO COM O RESPONSÁVEL!",
                 )
         else:
-            # Valores padrão para quando for "Conforme"
             problema = ""
             local = ""
             impacto = ""
@@ -292,7 +333,7 @@ with aba1:
                         time.sleep(1.5)
                         st.cache_data.clear()
                         st.session_state.pop("df_override", None)
-                        st.success(f"Registro '{status_op}' salvo com sucesso! O formulário foi limpo.")
+                        st.success(f"Registro '{status_op}' salvo com sucesso!")
                         st.rerun()
                     else:
                         st.error(f"Erro {res.status_code}: {res.text}")
@@ -300,7 +341,7 @@ with aba1:
             except requests.exceptions.Timeout:
                 st.cache_data.clear()
                 st.session_state.pop("df_override", None)
-                st.success(f"Registro '{status_op}' processado com sucesso! O formulário foi limpo.")
+                st.success(f"Registro '{status_op}' processado com sucesso!")
                 st.rerun()
             except Exception as e:
                 st.error(f"Falha de conexão com o Power Automate: {e}")
@@ -411,8 +452,138 @@ with aba2:
                             except Exception as e:
                                 st.error(f"Falha de conexão com a API: {e}")
 
-# --- ABA 3: DASHBOARD ---
-with aba3:
+# --- ABA 3: ROTINAS PROGRAMADAS ---
+with aba4 if False else aba3:
+    st.subheader("📅 Programação de Rotinas Gemba")
+    st.write("Agende inspeções recorrentes e receba lembretes automáticos por e-mail.")
+
+    with st.expander("➕ Cadastrar Nova Rotina Programada", expanded=False):
+        with st.form("form_nova_rotina", clear_on_submit=True):
+            col_r1, col_r2 = st.columns(2)
+            with col_r1:
+                rotina_pessoa = st.selectbox(
+                    "Responsável pela Rotina*",
+                    options=AUDITORES_GESTORES,
+                    index=None,
+                    placeholder="Selecione o auditor...",
+                )
+                rotina_email = st.selectbox(
+                    "E-mail para Notificação*",
+                    options=EMAILS_CORPORATIVOS,
+                    index=None,
+                    placeholder="Selecione o e-mail...",
+                )
+            with col_r2:
+                rotina_dia = st.selectbox(
+                    "Dia da Semana Fixo*",
+                    options=DIAS_SEMANA,
+                )
+                rotina_categoria = st.selectbox(
+                    "Categoria da Inspeção*",
+                    options=list(CATEGORIAS.keys()),
+                )
+
+            rotina_estacao = st.text_input("Setor / Área a ser Inspecionada*", placeholder="Ex: Linha de Montagem 02")
+            rotina_obs = st.text_area("Objetivo / Instruções adicionais", placeholder="Ex: Verificar uso correto de EPIs e organização da bancada.")
+
+            btn_salvar_rotina = st.form_submit_button("Agendar Rotina", type="primary")
+
+            if btn_salvar_rotina:
+                if not rotina_pessoa or not rotina_email or not rotina_estacao:
+                    st.error("Preencha todos os campos obrigatórios (*).")
+                else:
+                    id_rotina = str(uuid.uuid4())[:8]
+                    payload_rotina = {
+                        "id0": id_rotina,
+                        "responsavel_nome": rotina_pessoa,
+                        "responsavel_email": rotina_email,
+                        "dia_semana": rotina_dia,
+                        "categoria": rotina_categoria,
+                        "estacao": rotina_estacao,
+                        "instrucoes": rotina_obs,
+                        "data_cadastro": datetime.now().strftime("%Y-%m-%d"),
+                    }
+
+                    # Armazenar localmente (fallback para sessão)
+                    if "rotinas_local" not in st.session_state:
+                        st.session_state["rotinas_local"] = pd.DataFrame()
+                    st.session_state["rotinas_local"] = pd.concat([
+                        st.session_state["rotinas_local"],
+                        pd.DataFrame([payload_rotina])
+                    ], ignore_index=True)
+
+                    if WEBHOOK_ROTINAS_CRIAR:
+                        try:
+                            res_r = requests.post(WEBHOOK_ROTINAS_CRIAR, json=payload_rotina, timeout=10)
+                            st.success("Rotina agendada com sucesso no sistema!")
+                        except Exception as e:
+                            st.warning("Salvo localmente. Falha ao conectar ao webhook de rotinas.")
+                    else:
+                        st.success("Rotina agendada com sucesso!")
+
+                    st.cache_data.clear()
+                    st.rerun()
+
+    st.divider()
+    st.markdown("### 🟦 Quadro de Rotinas Ativas")
+
+    # Obter DataFrame de Rotinas (servidor ou sessão local)
+    df_rot_exibir = df_rotinas if not df_rotinas.empty else st.session_state.get("rotinas_local", pd.DataFrame())
+
+    if df_rot_exibir.empty:
+        st.info("Nenhuma rotina cadastrada ainda. Clique no campo acima para agendar.")
+    else:
+        # Mapeamento para verificar se a pessoa realizou a inspeção esta semana
+        # Obtém o número da semana atual
+        semana_atual = datetime.now().isocalendar()[1]
+        ano_atual = datetime.now().year
+
+        cols_r = st.columns(2)
+        for idx_r, row_r in df_rot_exibir.iterrows():
+            nome_resp = row_r.get("responsavel_nome", row_r.get("responsavel", "N/A"))
+            email_resp = row_r.get("responsavel_email", "")
+            dia_semana_rot = row_r.get("dia_semana", "N/A")
+            cat_rot = row_r.get("categoria", "N/A")
+            estacao_rot = row_r.get("estacao", "N/A")
+            instrucoes_rot = row_r.get("instrucoes", "")
+
+            # Checar se existe registro no banco de dados para essa pessoa nesta semana
+            executou_semana = False
+            if not df_dados.empty:
+                col_auditor = next((c for c in df_dados.columns if "auditor" in c), None)
+                col_data = next((c for c in df_dados.columns if "data" in c or "created" in c), None)
+
+                if col_auditor and col_data:
+                    for _, row_d in df_dados.iterrows():
+                        if str(row_d.get(col_auditor, "")).strip().lower() == str(nome_resp).strip().lower():
+                            raw_dt = str(row_d.get(col_data, ""))
+                            try:
+                                dt_obj = pd.to_datetime(raw_dt)
+                                if dt_obj.isocalendar()[1] == semana_atual and dt_obj.year == ano_atual:
+                                    executou_semana = True
+                                    break
+                            except Exception:
+                                pass
+
+            with cols_r[idx_r % 2]:
+                with st.container(border=True):
+                    st.markdown(f"### 🟦 Rotina: {cat_rot}")
+                    st.caption(f"**Dia Programado:** 📅 `{dia_semana_rot}`")
+                    st.write(f"👤 **Responsável:** {nome_resp}")
+                    st.write(f"📧 **E-mail:** `{email_resp}`")
+                    st.write(f"📍 **Setor / Área:** {estacao_rot}")
+                    if instrucoes_rot:
+                        st.write(f"📝 **Instruções:** {instrucoes_rot}")
+
+                    st.divider()
+
+                    if executou_semana:
+                        st.success("✅ **Status desta semana:** Tarefa Executada")
+                    else:
+                        st.error("❌ **Status desta semana:** Pendente / Não Executada")
+
+# --- ABA 4: DASHBOARD ---
+with aba4:
     st.subheader("📊 Indicadores do Gemba Walk")
 
     if not df_dados.empty and "status_clean" in df_dados.columns:
