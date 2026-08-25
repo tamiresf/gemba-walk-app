@@ -75,7 +75,7 @@ AUDITORES_GESTORES = sorted(
             "William Sousa",
             "Felipe Muniz",
             "Eduardo Francisco",
-            "Tamires Ferreira"
+            "Tamires Ferreira",
         ])
     )
 )
@@ -143,7 +143,6 @@ def buscar_dados_servidor():
 @st.cache_data(ttl=5, show_spinner=False)
 def buscar_rotinas_servidor():
     if not WEBHOOK_ROTINAS_LER:
-        # Retorna lista guardada na sessão para testes se não houver webhook configurado
         return st.session_state.get("rotinas_local", pd.DataFrame())
     try:
         res = requests.get(WEBHOOK_ROTINAS_LER, timeout=15)
@@ -454,7 +453,7 @@ with aba2:
                                 st.error(f"Falha de conexão com a API: {e}")
 
 # --- ABA 3: ROTINAS PROGRAMADAS ---
-with aba4 if False else aba3:
+with aba3:
     st.subheader("📅 Programação de Rotinas Gemba")
     st.write("Agende inspeções recorrentes e receba lembretes automáticos por e-mail.")
 
@@ -505,7 +504,6 @@ with aba4 if False else aba3:
                         "data_cadastro": datetime.now().strftime("%Y-%m-%d"),
                     }
 
-                    # Armazenar localmente (fallback para sessão)
                     if "rotinas_local" not in st.session_state:
                         st.session_state["rotinas_local"] = pd.DataFrame()
                     st.session_state["rotinas_local"] = pd.concat([
@@ -528,14 +526,11 @@ with aba4 if False else aba3:
     st.divider()
     st.markdown("### 🟦 Quadro de Rotinas Ativas")
 
-    # Obter DataFrame de Rotinas (servidor ou sessão local)
     df_rot_exibir = df_rotinas if not df_rotinas.empty else st.session_state.get("rotinas_local", pd.DataFrame())
 
     if df_rot_exibir.empty:
         st.info("Nenhuma rotina cadastrada ainda. Clique no campo acima para agendar.")
     else:
-        # Mapeamento para verificar se a pessoa realizou a inspeção esta semana
-        # Obtém o número da semana atual
         semana_atual = datetime.now().isocalendar()[1]
         ano_atual = datetime.now().year
 
@@ -548,7 +543,6 @@ with aba4 if False else aba3:
             estacao_rot = row_r.get("estacao", "N/A")
             instrucoes_rot = row_r.get("instrucoes", "")
 
-            # Checar se existe registro no banco de dados para essa pessoa nesta semana
             executou_semana = False
             if not df_dados.empty:
                 col_auditor = next((c for c in df_dados.columns if "auditor" in c), None)
