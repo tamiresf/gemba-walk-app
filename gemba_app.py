@@ -180,7 +180,17 @@ aba1, aba2, aba3 = st.tabs(
 
 # --- ABA 1: NOVO REGISTRO ---
 with aba1:
-    # Uso do st.form com clear_on_submit=True para limpar a tela após o envio
+    # 1. Seleção de Status fora do form para reexecução imediata do script
+    status_op = st.radio(
+        "Status da Inspeção*",
+        ["Conforme", "Não Conforme"],
+        horizontal=True,
+        key="status_op_input",
+    )
+
+    st.divider()
+
+    # 2. Formulário principal
     with st.form("form_novo_registro", clear_on_submit=True):
         st.subheader("Informações Gerais")
         col1, col2 = st.columns(2)
@@ -201,40 +211,43 @@ with aba1:
         )
         st.info(f"💡 **O que observar:** {CATEGORIAS[categoria_sel]}")
 
-        status_op = st.radio(
-            "Status da Inspeção*",
-            ["Conforme", "Não Conforme"],
-            horizontal=True,
-            key="status_op_input",
-        )
+        # 3. Exibir campos adicionais apenas se for "Não Conforme"
+        if status_op == "Não Conforme":
+            st.divider()
+            st.markdown("**Detalhes da Inspeção**")
+            problema = st.text_area("Qual foi o problema?*")
+            local = st.text_input("Onde ocorreu?*")
+            impacto = st.text_area("Qual o impacto?")
+            causa = st.text_area("Causa aparente?")
+            acao_imediata = st.text_area("Ação imediata?")
 
-        st.divider()
+            col_resp, col_prazo = st.columns(2)
 
-        st.markdown("**Detalhes da Inspeção (Preencher se 'Não Conforme')**")
-        problema = st.text_area("Qual foi o problema?*")
-        local = st.text_input("Onde ocorreu?*")
-        impacto = st.text_area("Qual o impacto?")
-        causa = st.text_area("Causa aparente?")
-        acao_imediata = st.text_area("Ação imediata?")
+            with col_resp:
+                responsavel_email = st.selectbox(
+                    "E-mail do Responsável*",
+                    options=EMAILS_CORPORATIVOS,
+                    index=None,
+                    placeholder="Selecione ou digite o e-mail...",
+                    help="Digite as primeiras letras do e-mail para filtrar a lista.",
+                )
 
-        col_resp, col_prazo = st.columns(2)
-
-        with col_resp:
-            responsavel_email = st.selectbox(
-                "E-mail do Responsável*",
-                options=EMAILS_CORPORATIVOS,
-                index=None,
-                placeholder="Selecione ou digite o e-mail...",
-                help="Digite as primeiras letras do e-mail para filtrar a lista.",
-            )
-
-        with col_prazo:
-            st.markdown("🚨 **Atenção ao Prazo Acordado**")
-            prazo = st.date_input(
-                "📅 Prazo para Solução*",
-                value=date.today(),
-                help="⚠️ DEFINA UM PRAZO ACORDADO COM O RESPONSÁVEL!",
-            )
+            with col_prazo:
+                st.markdown("🚨 **Atenção ao Prazo Acordado**")
+                prazo = st.date_input(
+                    "📅 Prazo para Solução*",
+                    value=date.today(),
+                    help="⚠️ DEFINA UM PRAZO ACORDADO COM O RESPONSÁVEL!",
+                )
+        else:
+            # Valores padrão para quando for "Conforme"
+            problema = ""
+            local = ""
+            impacto = ""
+            causa = ""
+            acao_imediata = ""
+            responsavel_email = None
+            prazo = date.today()
 
         submitted = st.form_submit_button("Salvar Registro", type="primary")
 
