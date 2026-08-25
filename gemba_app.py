@@ -75,6 +75,7 @@ AUDITORES_GESTORES = sorted(
             "William Sousa",
             "Felipe Muniz",
             "Eduardo Francisco",
+            "Tamires Ferreira"
         ])
     )
 )
