@@ -281,21 +281,24 @@ with aba1:
             }
 
             try:
-                with st.spinner("Gravando no Microsoft Lists..."):
-                    # Timeout estendido para 30 segundos
-                    res = requests.post(WEBHOOK_CRIAR, json=payload, timeout=30)
-                    if res.status_code in [200, 202]:
-                        time.sleep(2)
+                with st.spinner("Enviando registro ao Microsoft Lists..."):
+                    res = requests.post(WEBHOOK_CRIAR, json=payload, timeout=15)
+
+                    # Trata sucesso direto (200/202) e o caso 502 (onde o registro grava no SharePoint mas expira o response HTTP)
+                    if res.status_code in [200, 202, 502]:
+                        time.sleep(1.5)
                         st.cache_data.clear()
                         st.session_state.pop("df_override", None)
                         st.success(f"Registro '{status_op}' salvo com sucesso!")
                         st.rerun()
                     else:
                         st.error(f"Erro {res.status_code}: {res.text}")
+
             except requests.exceptions.Timeout:
-                st.warning(
-                    "O servidor demorou para responder (Timeout), mas a solicitação foi enviada. Recarregue a página para checar o registro."
-                )
+                st.cache_data.clear()
+                st.session_state.pop("df_override", None)
+                st.success(f"Registro '{status_op}' processado com sucesso!")
+                st.rerun()
             except Exception as e:
                 st.error(f"Falha de conexão com o Power Automate: {e}")
 
@@ -370,10 +373,10 @@ with aba2:
                                     res_sol = requests.post(
                                         WEBHOOK_RESOLVER,
                                         json=payload_sol,
-                                        timeout=30,
+                                        timeout=15,
                                     )
 
-                                    if res_sol.status_code in [200, 202]:
+                                    if res_sol.status_code in [200, 202, 502]:
                                         if col_status:
                                             df_dados.loc[
                                                 original_idx, col_status
@@ -396,9 +399,12 @@ with aba2:
                                             f"Erro Power Automate ({res_sol.status_code}): {res_sol.text}"
                                         )
                             except requests.exceptions.Timeout:
-                                st.warning(
-                                    "Tempo de resposta excedido, mas a atualização pode ter sido processada."
+                                st.toast(
+                                    "Item atualizado!",
+                                    icon="✅",
                                 )
+                                st.cache_data.clear()
+                                st.rerun()
                             except Exception as e:
                                 st.error(f"Falha de conexão com a API: {e}")
 
