@@ -18,7 +18,7 @@ WEBHOOK_CRIAR = st.secrets.get("POWER_AUTOMATE_CRIAR_URL", "https://defaultcd148
 WEBHOOK_RESOLVER = st.secrets.get("POWER_AUTOMATE_RESOLVER_URL", "https://defaultcd14821755e24b4e86f837f80bf5ae.f3.environment.api.powerplatform.com:443/powerautomate/automations/direct/cu/06/workflows/a1df9787e2b94d19ab5643e165491bc8/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=yLF9HKRO6XtG75qHGA_U7X1g-NMCcnT4QHGXPdUkiFA")
 WEBHOOK_LER = st.secrets.get("POWER_AUTOMATE_LER_URL", "https://defaultcd14821755e24b4e86f837f80bf5ae.f3.environment.api.powerplatform.com:443/powerautomate/automations/direct/cu/27/workflows/62a264c57b214336aa6205ae2fb47c59/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=JJ2EZPMarOKgpxHQNzHh0ZR7N5LKtQ53eEO1wB-eePM")
 
-# --- 3. LISTA FIXA DE E-MAILS ---
+# --- 3. LISTAS FIXAS ---
 EMAILS_CORPORATIVOS = sorted(
     list(
         set([
@@ -39,6 +39,29 @@ EMAILS_CORPORATIVOS = sorted(
             "felipe.muniz@mustad.com",
             "tamires.santos@mustad.com",
             "eduardo.francisco@mustad.com",
+        ])
+    )
+)
+
+AUDITORES_GESTORES = sorted(
+    list(
+        set([
+            "Jaqueline Guerra",
+            "Geovane Valdevino",
+            "Gissele Nogueira",
+            "Yuri Fernandes",
+            "Felipe Possato",
+            "Henrique Borges",
+            "Jessica Brandão",
+            "Helen Esteves",
+            "Giovane Carvalho",
+            "Nelcir Junior",
+            "Hebert Murtha",
+            "Maicon Alves",
+            "Victor Cavadas",
+            "William Sousa",
+            "Felipe Muniz",
+            "Eduardo Francisco",
         ])
     )
 )
@@ -82,7 +105,6 @@ def buscar_dados_servidor():
                     df_dados = pd.DataFrame([dados_json])
 
             if not df_dados.empty:
-                # Padronizar nomes das colunas mantendo os originais intactos no df
                 df_dados.columns = (
                     df_dados.columns.astype(str).str.strip().str.lower()
                 )
@@ -117,7 +139,7 @@ if not df_dados.empty and col_status:
         df_dados[col_status].fillna("").astype(str).str.strip().str.lower()
     )
 
-# Identificar colunas de ID (Tanto 'id0' quanto o 'id' do SharePoint)
+# Identificar colunas de ID
 col_id0 = next(
     (c for c in df_dados.columns if c == "id0"), None
 ) if not df_dados.empty else None
@@ -147,7 +169,13 @@ with aba1:
         st.subheader("Informações Gerais")
         col1, col2 = st.columns(2)
         with col1:
-            auditor = st.text_input("Nome do Auditor/Gestor*")
+            auditor = st.selectbox(
+                "Nome do Auditor/Gestor*",
+                options=AUDITORES_GESTORES,
+                index=None,
+                placeholder="Selecione ou digite o nome...",
+                help="Digite as primeiras letras do nome para filtrar a lista.",
+            )
         with col2:
             estacao = st.text_input("Área / Estação*")
 
@@ -243,11 +271,9 @@ with aba2:
         else:
             cols = st.columns(2)
             for idx, (original_idx, row) in enumerate(pendentes.iterrows()):
-                # Tenta capturar id0 primeiro; caso nulo, pega a coluna id alternativa
                 val_id0 = str(row.get(col_id0)) if col_id0 and pd.notna(row.get(col_id0)) else None
                 val_sp_id = str(row.get(col_sp_id)) if col_sp_id and pd.notna(row.get(col_sp_id)) else str(idx)
                 
-                # Exibição
                 display_id = val_id0 if val_id0 else val_sp_id
 
                 with cols[idx % 2]:
@@ -275,7 +301,6 @@ with aba2:
                         if st.button(
                             "✅ Resolvido", key=f"btn_res_{display_id}_{original_idx}"
                         ):
-                            # Monta payload completo cobrindo todas as variações conhecidas de schema do Power Automate
                             payload_sol = {
                                 "id0": val_id0 if val_id0 else val_sp_id,
                                 "id": val_sp_id,
