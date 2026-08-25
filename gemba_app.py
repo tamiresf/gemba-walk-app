@@ -14,28 +14,12 @@ st.set_page_config(
 )
 
 # --- 2. CARREGAR URLs DOS SECRETS ---
-WEBHOOK_CRIAR = st.secrets.get(
-    "POWER_AUTOMATE_CRIAR_URL",
-    "https://defaultcd14821755e24b4e86f837f80bf5ae.f3.environment.api.powerplatform.com:443/powerautomate/automations/direct/cu/08/workflows/24e560b839864d9b91720231dbb6584e/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=cZEo_aNlKwbk9kP84Yu_OITxnl6wZqrM-RCGjOZXzss",
-)
-WEBHOOK_RESOLVER = st.secrets.get(
-    "POWER_AUTOMATE_RESOLVER_URL",
-    "https://defaultcd14821755e24b4e86f837f80bf5ae.f3.environment.api.powerplatform.com:443/powerautomate/automations/direct/cu/06/workflows/a1df9787e2b94d19ab5643e165491bc8/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=yLF9HKRO6XtG75qHGA_U7X1g-NMCcnT4QHGXPdUkiFA",
-)
-WEBHOOK_LER = st.secrets.get(
-    "POWER_AUTOMATE_LER_URL",
-    "https://defaultcd14821755e24b4e86f837f80bf5ae.f3.environment.api.powerplatform.com:443/powerautomate/automations/direct/cu/27/workflows/62a264c57b214336aa6205ae2fb47c59/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=JJ2EZPMarOKgpxHQNzHh0ZR7N5LKtQ53eEO1wB-eePM",
-)
-
-# WEBHOOKS DE ROTINAS
-WEBHOOK_ROTINAS_CRIAR = st.secrets.get(
-    "POWER_AUTOMATE_ROTINAS_CRIAR_URL",
-    "https://defaultcd14821755e24b4e86f837f80bf5ae.f3.environment.api.powerplatform.com:443/powerautomate/automations/direct/cu/27/workflows/b5825bef53af44be9972fed8172241ee/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=3IQZAY4rMptiHzx_F1QYUjqIsWV4HhSoeQWsGloCAMU",
-)
-WEBHOOK_ROTINAS_LER = st.secrets.get(
-    "POWER_AUTOMATE_ROTINAS_LER_URL",
-    "https://defaultcd14821755e24b4e86f837f80bf5ae.f3.environment.api.powerplatform.com:443/powerautomate/automations/direct/cu/09/workflows/4c0c6254cf6a451f8b3180c48f3a8343/triggers/manual/paths/invoke?api-version=1",
-)
+# Certifique-se de configurar estas chaves no seu arquivo .streamlit/secrets.toml
+WEBHOOK_CRIAR = st.secrets.get("POWER_AUTOMATE_CRIAR_URL", "")
+WEBHOOK_RESOLVER = st.secrets.get("POWER_AUTOMATE_RESOLVER_URL", "")
+WEBHOOK_LER = st.secrets.get("POWER_AUTOMATE_LER_URL", "")
+WEBHOOK_ROTINAS_CRIAR = st.secrets.get("POWER_AUTOMATE_ROTINAS_CRIAR_URL", "")
+WEBHOOK_ROTINAS_LER = st.secrets.get("POWER_AUTOMATE_ROTINAS_LER_URL", "")
 
 # --- 3. LISTAS FIXAS ---
 EMAILS_CORPORATIVOS = sorted(
@@ -111,70 +95,33 @@ CATEGORIAS = {
 
 
 # --- 5. FUNÇÕES PARA CARREGAR DADOS ---
-@st.cache_data(ttl=2, show_spinner=False)
-def buscar_dados_servidor():
-    try:
-        res = requests.get(WEBHOOK_LER, timeout=15)
-        if res.status_code != 200:
-            res = requests.post(WEBHOOK_LER, json={}, timeout=15)
-
-        if res.status_code in [200, 202]:
-            dados_json = res.json()
-            df_dados = pd.DataFrame()
-
-            if isinstance(dados_json, list):
-                df_dados = pd.DataFrame(dados_json)
-            elif isinstance(dados_json, dict):
-                for chave in ["value", "dados", "items", "body"]:
-                    if chave in dados_json and isinstance(dados_json[chave], list):
-                        df_dados = pd.DataFrame(dados_json[chave])
-                        break
-                if df_dados.empty:
-                    df_dados = pd.DataFrame([dados_json])
-
-            if not df_dados.empty:
-                df_dados.columns = (
-                    df_dados.columns.astype(str).str.strip().str.lower()
-                )
-
-            return df_dados
-        else:
-            return pd.DataFrame()
-    except Exception:
-        return pd.DataFrame()
-
-
 @st.cache_data(ttl=5, show_spinner=False)
-def buscar_rotinas_servidor():
-    if not WEBHOOK_ROTINAS_LER:
-        return st.session_state.get("rotinas_local", pd.DataFrame())
+def buscar_dados_servidor(url_webhook):
+    if not url_webhook:
+        return pd.DataFrame()
     try:
-        res = requests.get(WEBHOOK_ROTINAS_LER, timeout=15)
+        res = requests.get(url_webhook, timeout=15)
         if res.status_code != 200:
-            res = requests.post(WEBHOOK_ROTINAS_LER, json={}, timeout=15)
+            res = requests.post(url_webhook, json={}, timeout=15)
 
         if res.status_code in [200, 202]:
             dados_json = res.json()
-            df_rotinas = pd.DataFrame()
+            df = pd.DataFrame()
 
             if isinstance(dados_json, list):
-                df_rotinas = pd.DataFrame(dados_json)
+                df = pd.DataFrame(dados_json)
             elif isinstance(dados_json, dict):
                 for chave in ["value", "dados", "items", "body"]:
                     if chave in dados_json and isinstance(dados_json[chave], list):
-                        df_rotinas = pd.DataFrame(dados_json[chave])
+                        df = pd.DataFrame(dados_json[chave])
                         break
-                if df_rotinas.empty:
-                    df_rotinas = pd.DataFrame([dados_json])
+                if df.empty:
+                    df = pd.DataFrame([dados_json])
 
-            if not df_rotinas.empty:
-                df_rotinas.columns = (
-                    df_rotinas.columns.astype(str).str.strip().str.lower()
-                )
-
-            return df_rotinas
-        else:
-            return pd.DataFrame()
+            if not df.empty:
+                df.columns = df.columns.astype(str).str.strip().str.lower()
+            return df
+        return pd.DataFrame()
     except Exception:
         return pd.DataFrame()
 
@@ -190,40 +137,25 @@ with st.sidebar:
 if "df_override" in st.session_state:
     df_dados = st.session_state["df_override"]
 else:
-    df_dados = buscar_dados_servidor()
+    df_dados = buscar_dados_servidor(WEBHOOK_LER)
 
-df_rotinas = buscar_rotinas_servidor()
+df_rotinas = buscar_dados_servidor(WEBHOOK_ROTINAS_LER)
+if df_rotinas.empty and "rotinas_local" in st.session_state:
+    df_rotinas = st.session_state["rotinas_local"]
 
 # Identificar a coluna de status
-col_status = (
-    next((c for c in df_dados.columns if "status" in c), None)
-    if not df_dados.empty
-    else None
-)
+col_status = next((c for c in df_dados.columns if "status" in c), None) if not df_dados.empty else None
 
 if not df_dados.empty and col_status:
-    df_dados["status_clean"] = (
-        df_dados[col_status].fillna("").astype(str).str.strip().str.lower()
-    )
+    df_dados["status_clean"] = df_dados[col_status].fillna("").astype(str).str.strip().str.lower()
 
 # Identificar colunas de ID
-col_id0 = (
-    next((c for c in df_dados.columns if c == "id0"), None)
-    if not df_dados.empty
-    else None
-)
-
-col_sp_id = (
-    next((c for c in df_dados.columns if c in ["id", "id_unico", "title"]), None)
-    if not df_dados.empty
-    else None
-)
+col_id0 = next((c for c in df_dados.columns if c == "id0"), None) if not df_dados.empty else None
+col_sp_id = next((c for c in df_dados.columns if c in ["id", "id_unico", "title"]), None) if not df_dados.empty else None
 
 # --- 6. INTERFACE PRINCIPAL ---
 st.title("🔍 Gemba Walk Digital")
-aba1, aba2, aba3, aba4 = st.tabs(
-    ["📋 Novo Registro", "📌 Quadro de Post-its", "📅 Rotinas", "📊 Dashboard"]
-)
+aba1, aba2, aba3, aba4 = st.tabs(["📋 Novo Registro", "📌 Quadro de Post-its", "📅 Rotinas", "📊 Dashboard"])
 
 # --- ABA 1: NOVO REGISTRO ---
 with aba1:
@@ -245,15 +177,12 @@ with aba1:
                 options=AUDITORES_GESTORES,
                 index=None,
                 placeholder="Selecione ou digite o nome...",
-                help="Digite as primeiras letras do nome para filtrar a lista.",
                 key="auditor_input",
             )
         with col2:
             estacao = st.text_input("Área / Estação*", key="estacao_input")
 
-        categoria_sel = st.selectbox(
-            "Selecione a Categoria*", list(CATEGORIAS.keys()), key="cat_input"
-        )
+        categoria_sel = st.selectbox("Selecione a Categoria*", list(CATEGORIAS.keys()), key="cat_input")
         st.info(f"💡 **O que observar:** {CATEGORIAS[categoria_sel]}")
 
         if status_op == "Não Conforme":
@@ -273,7 +202,6 @@ with aba1:
                     options=EMAILS_CORPORATIVOS,
                     index=None,
                     placeholder="Selecione ou digite o e-mail...",
-                    help="Digite as primeiras letras do e-mail para filtrar a lista.",
                 )
 
             with col_prazo:
@@ -281,30 +209,21 @@ with aba1:
                 prazo = st.date_input(
                     "📅 Prazo para Solução*",
                     value=date.today(),
-                    help="⚠️ DEFINA UM PRAZO ACORDADO COM O RESPONSÁVEL!",
                 )
         else:
-            problema = ""
-            local = ""
-            impacto = ""
-            causa = ""
-            acao_imediata = ""
+            problema, local, impacto, causa, acao_imediata = "", "", "", "", ""
             responsavel_email = None
             prazo = date.today()
 
         submitted = st.form_submit_button("Salvar Registro", type="primary")
 
     if submitted:
-        if not auditor or not estacao:
-            st.error(
-                "Preencha as Informações Gerais obrigatórias (Auditor e Área/Estação)."
-            )
-        elif status_op == "Não Conforme" and (
-            not problema or not responsavel_email
-        ):
-            st.error(
-                "Preencha todos os campos obrigatórios (*) do detalhamento da Não Conformidade."
-            )
+        if not WEBHOOK_CRIAR:
+            st.error("URL do Webhook de criação (POWER_AUTOMATE_CRIAR_URL) não configurada nos secrets.")
+        elif not auditor or not estacao:
+            st.error("Preencha as Informações Gerais obrigatórias (Auditor e Área/Estação).")
+        elif status_op == "Não Conforme" and (not problema or not responsavel_email):
+            st.error("Preencha todos os campos obrigatórios (*) do detalhamento da Não Conformidade.")
         else:
             id_unico = str(uuid.uuid4())[:8]
 
@@ -330,7 +249,6 @@ with aba1:
             try:
                 with st.spinner("Enviando registro ao Microsoft Lists..."):
                     res = requests.post(WEBHOOK_CRIAR, json=payload, timeout=15)
-
                     if res.status_code in [200, 202, 502]:
                         time.sleep(1.5)
                         st.cache_data.clear()
@@ -339,7 +257,6 @@ with aba1:
                         st.rerun()
                     else:
                         st.error(f"Erro {res.status_code}: {res.text}")
-
             except requests.exceptions.Timeout:
                 st.cache_data.clear()
                 st.session_state.pop("df_override", None)
@@ -362,97 +279,51 @@ with aba2:
         else:
             cols = st.columns(2)
             for idx, (original_idx, row) in enumerate(pendentes.iterrows()):
-                val_id0 = (
-                    str(row.get(col_id0))
-                    if col_id0 and pd.notna(row.get(col_id0))
-                    else None
-                )
-                val_sp_id = (
-                    str(row.get(col_sp_id))
-                    if col_sp_id and pd.notna(row.get(col_sp_id))
-                    else str(idx)
-                )
-
+                val_id0 = str(row.get(col_id0)) if col_id0 and pd.notna(row.get(col_id0)) else None
+                val_sp_id = str(row.get(col_sp_id)) if col_sp_id and pd.notna(row.get(col_sp_id)) else str(idx)
                 display_id = val_id0 if val_id0 else val_sp_id
 
                 with cols[idx % 2]:
                     with st.container(border=True):
-                        st.markdown(
-                            f"### 🟨 {row.get('categoria', 'Não Conformidade')}"
-                        )
-                        st.caption(
-                            f"**ID:** `{display_id}` | **Criado por:** {row.get('auditor', 'N/A')}"
-                        )
-                        st.write(
-                            f"**Local:** {row.get('estacao', '')} - {row.get('local', '')}"
-                        )
+                        st.markdown(f"### 🟨 {row.get('categoria', 'Não Conformidade')}")
+                        st.caption(f"**ID:** `{display_id}` | **Criado por:** {row.get('auditor', 'N/A')}")
+                        st.write(f"**Local:** {row.get('estacao', '')} - {row.get('local', '')}")
                         st.write(f"**Problema:** {row.get('problema', '')}")
                         st.write(f"**Impacto:** {row.get('impacto', '')}")
                         st.write(f"**Causa Aparente:** {row.get('causa', '')}")
-                        st.write(
-                            f"**Ação Imediata:** {row.get('acao_imediata', '')}"
-                        )
-                        st.write(
-                            f"**Responsável:** {row.get('responsavel', '')}"
-                        )
+                        st.write(f"**Ação Imediata:** {row.get('acao_imediata', '')}")
+                        st.write(f"**Responsável:** {row.get('responsavel', '')}")
                         st.markdown(f"🗓️ **Prazo:** `{row.get('prazo', 'N/A')}`")
 
-                        if st.button(
-                            "✅ Resolvido",
-                            key=f"btn_res_{display_id}_{original_idx}",
-                        ):
-                            payload_sol = {
-                                "id0": val_id0 if val_id0 else val_sp_id,
-                                "id": val_sp_id,
-                                "ID": val_sp_id,
-                                "status": "Resolvido",
-                                "Status": "Resolvido",
-                                "data_solucao": datetime.now().strftime(
-                                    "%Y-%m-%d %H:%M:%S"
-                                ),
-                            }
-
-                            try:
-                                with st.spinner(
-                                    "Enviando atualização para o Power Automate..."
-                                ):
-                                    res_sol = requests.post(
-                                        WEBHOOK_RESOLVER,
-                                        json=payload_sol,
-                                        timeout=15,
-                                    )
-
-                                    if res_sol.status_code in [200, 202, 502]:
-                                        if col_status:
-                                            df_dados.loc[
-                                                original_idx, col_status
-                                            ] = "Resolvido"
-                                        df_dados.loc[
-                                            original_idx, "status_clean"
-                                        ] = "resolvido"
-                                        st.session_state["df_override"] = (
-                                            df_dados
-                                        )
-
-                                        st.cache_data.clear()
-                                        st.toast(
-                                            "Item marcado como Resolvido!",
-                                            icon="✅",
-                                        )
-                                        st.rerun()
-                                    else:
-                                        st.error(
-                                            f"Erro Power Automate ({res_sol.status_code}): {res_sol.text}"
-                                        )
-                            except requests.exceptions.Timeout:
-                                st.toast(
-                                    "Item atualizado!",
-                                    icon="✅",
-                                )
-                                st.cache_data.clear()
-                                st.rerun()
-                            except Exception as e:
-                                st.error(f"Falha de conexão com a API: {e}")
+                        if st.button("✅ Resolvido", key=f"btn_res_{display_id}_{original_idx}"):
+                            if not WEBHOOK_RESOLVER:
+                                st.error("URL de resolução não configurada.")
+                            else:
+                                payload_sol = {
+                                    "id0": val_id0 if val_id0 else val_sp_id,
+                                    "id": val_sp_id,
+                                    "status": "Resolvido",
+                                    "data_solucao": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                                }
+                                try:
+                                    with st.spinner("Enviando atualização..."):
+                                        res_sol = requests.post(WEBHOOK_RESOLVER, json=payload_sol, timeout=15)
+                                        if res_sol.status_code in [200, 202, 502]:
+                                            if col_status:
+                                                df_dados.loc[original_idx, col_status] = "Resolvido"
+                                            df_dados.loc[original_idx, "status_clean"] = "resolvido"
+                                            st.session_state["df_override"] = df_dados
+                                            st.cache_data.clear()
+                                            st.toast("Item marcado como Resolvido!", icon="✅")
+                                            st.rerun()
+                                        else:
+                                            st.error(f"Erro Power Automate ({res_sol.status_code}): {res_sol.text}")
+                                except requests.exceptions.Timeout:
+                                    st.toast("Item atualizado!", icon="✅")
+                                    st.cache_data.clear()
+                                    st.rerun()
+                                except Exception as e:
+                                    st.error(f"Falha de conexão com a API: {e}")
 
 # --- ABA 3: ROTINAS PROGRAMADAS ---
 with aba3:
@@ -463,30 +334,14 @@ with aba3:
         with st.form("form_nova_rotina", clear_on_submit=True):
             col_r1, col_r2 = st.columns(2)
             with col_r1:
-                rotina_pessoa = st.selectbox(
-                    "Responsável pela Rotina*",
-                    options=AUDITORES_GESTORES,
-                    index=None,
-                    placeholder="Selecione o auditor...",
-                )
-                rotina_email = st.selectbox(
-                    "E-mail para Notificação*",
-                    options=EMAILS_CORPORATIVOS,
-                    index=None,
-                    placeholder="Selecione o e-mail...",
-                )
+                rotina_pessoa = st.selectbox("Responsável pela Rotina*", options=AUDITORES_GESTORES, index=None)
+                rotina_email = st.selectbox("E-mail para Notificação*", options=EMAILS_CORPORATIVOS, index=None)
             with col_r2:
-                rotina_dia = st.selectbox(
-                    "Dia da Semana Fixo*",
-                    options=DIAS_SEMANA,
-                )
-                rotina_categoria = st.selectbox(
-                    "Categoria da Inspeção*",
-                    options=list(CATEGORIAS.keys()),
-                )
+                rotina_dia = st.selectbox("Dia da Semana Fixo*", options=DIAS_SEMANA)
+                rotina_categoria = st.selectbox("Categoria da Inspeção*", options=list(CATEGORIAS.keys()))
 
             rotina_estacao = st.text_input("Setor / Área a ser Inspecionada*", placeholder="Ex: Linha de Montagem 02")
-            rotina_obs = st.text_area("Objetivo / Instruções adicionais", placeholder="Ex: Verificar uso correto de EPIs e organização da bancada.")
+            rotina_obs = st.text_area("Objetivo / Instruções adicionais", placeholder="Ex: Verificar uso correto de EPIs")
 
             btn_salvar_rotina = st.form_submit_button("Agendar Rotina", type="primary")
 
@@ -508,16 +363,17 @@ with aba3:
 
                     if "rotinas_local" not in st.session_state:
                         st.session_state["rotinas_local"] = pd.DataFrame()
-                    st.session_state["rotinas_local"] = pd.concat([
-                        st.session_state["rotinas_local"],
-                        pd.DataFrame([payload_rotina])
-                    ], ignore_index=True)
+
+                    st.session_state["rotinas_local"] = pd.concat(
+                        [st.session_state["rotinas_local"], pd.DataFrame([payload_rotina])],
+                        ignore_index=True,
+                    )
 
                     if WEBHOOK_ROTINAS_CRIAR:
                         try:
-                            res_r = requests.post(WEBHOOK_ROTINAS_CRIAR, json=payload_rotina, timeout=10)
+                            requests.post(WEBHOOK_ROTINAS_CRIAR, json=payload_rotina, timeout=10)
                             st.success("Rotina agendada com sucesso no sistema!")
-                        except Exception as e:
+                        except Exception:
                             st.warning("Salvo localmente. Falha ao conectar ao webhook de rotinas.")
                     else:
                         st.success("Rotina agendada com sucesso!")
@@ -528,15 +384,7 @@ with aba3:
     st.divider()
     st.markdown("### 🟦 Quadro de Rotinas Ativas")
 
-    # Obter DataFrame de Rotinas
-    df_rot_exibir = df_rotinas.copy() if not df_rotinas.empty else st.session_state.get("rotinas_local", pd.DataFrame())
-
-    with st.expander("🛠️ Debug: Diagnóstico de Dados de Rotinas", expanded=False):
-        st.write("Variável `WEBHOOK_ROTINAS_LER` configurada?:", bool(WEBHOOK_ROTINAS_LER))
-        st.write("Registros encontrados:", len(df_rot_exibir))
-        if not df_rot_exibir.empty:
-            st.write("Colunas detectadas:", list(df_rot_exibir.columns))
-            st.dataframe(df_rot_exibir)
+    df_rot_exibir = df_rotinas.copy()
 
     if df_rot_exibir.empty:
         st.info("Nenhuma rotina cadastrada ainda ou o webhook não retornou dados.")
@@ -544,11 +392,9 @@ with aba3:
         semana_atual = datetime.now().isocalendar()[1]
         ano_atual = datetime.now().year
 
-        # Função auxiliar flexível para mapear nomes de colunas vindo do SharePoint
         def obter_valor_coluna(row, palavras_chave, padrao="N/A"):
             for col in row.index:
-                col_str = str(col).lower()
-                if any(p in col_str for p in palavras_chave):
+                if any(p in str(col).lower() for p in palavras_chave):
                     val = row.get(col)
                     if pd.notna(val) and str(val).strip() != "":
                         return str(val)
@@ -569,16 +415,13 @@ with aba3:
                 col_data = next((c for c in df_dados.columns if "data" in c or "created" in c), None)
 
                 if col_auditor and col_data:
-                    for _, row_d in df_dados.iterrows():
-                        if str(row_d.get(col_auditor, "")).strip().lower() == str(nome_resp).strip().lower():
-                            raw_dt = str(row_d.get(col_data, ""))
-                            try:
-                                dt_obj = pd.to_datetime(raw_dt)
-                                if dt_obj.isocalendar()[1] == semana_atual and dt_obj.year == ano_atual:
-                                    executou_semana = True
-                                    break
-                            except Exception:
-                                pass
+                    datas_convertidas = pd.to_datetime(df_dados[col_data], errors="coerce")
+                    filtro = (
+                        (df_dados[col_auditor].astype(str).str.strip().str.lower() == str(nome_resp).strip().lower())
+                        & (datas_convertidas.dt.isocalendar().week == semana_atual)
+                        & (datas_convertidas.dt.year == ano_atual)
+                    )
+                    executou_semana = filtro.any()
 
             with cols_r[idx_r % 2]:
                 with st.container(border=True):
@@ -601,7 +444,7 @@ with aba4:
     else:
         m1, m2, m3 = st.columns(3)
         total_regs = len(df_dados)
-        
+
         col_st = next((c for c in df_dados.columns if "status" in c), None)
         if col_st:
             pendentes_cnt = len(df_dados[df_dados[col_st].astype(str).str.lower().str.contains("pendente")])
