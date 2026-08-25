@@ -526,26 +526,45 @@ with aba3:
     st.divider()
     st.markdown("### 🟦 Quadro de Rotinas Ativas")
 
-    df_rot_exibir = df_rotinas if not df_rotinas.empty else st.session_state.get("rotinas_local", pd.DataFrame())
+    # Obter DataFrame de Rotinas (servidor ou sessão local)
+    df_rot_exibir = df_rotinas.copy() if not df_rotinas.empty else st.session_state.get("rotinas_local", pd.DataFrame())
+
+    # Ferramenta para inspecionar os nomes das colunas trazidas pelo Power Automate
+    with st.expander("🛠️ Debug: Diagnóstico de Dados de Rotinas", expanded=False):
+        st.write("Variável `WEBHOOK_ROTINAS_LER` configurada?:", bool(WEBHOOK_ROTINAS_LER))
+        st.write("Registros encontrados:", len(df_rot_exibir))
+        if not df_rot_exibir.empty:
+            st.write("Colunas detectadas:", list(df_rot_exibir.columns))
+            st.dataframe(df_rot_exibir)
 
     if df_rot_exibir.empty:
-        st.info("Nenhuma rotina cadastrada ainda. Clique no campo acima para agendar.")
+        st.info("Nenhuma rotina cadastrada ainda ou a URL do `POWER_AUTOMATE_ROTINAS_LER_URL` não retornou dados. Use o campo acima para cadastrar.")
     else:
         semana_atual = datetime.now().isocalendar()[1]
         ano_atual = datetime.now().year
 
+        # Função auxiliar para encontrar dinamicamente o valor independente do nome exato da coluna no SharePoint
+        def obter_valor_coluna(row, palavras_chave, padrao="N/A"):
+            for col in row.index:
+                col_str = str(col).lower()
+                if any(p in col_str for p in palavras_chave):
+                    val = row.get(col)
+                    if pd.notna(val) and str(val).strip() != "":
+                        return str(val)
+            return padrao
+
         cols_r = st.columns(2)
-        for idx_r, row_r in df_rot_exibir.iterrows():
-            nome_resp = row_r.get("responsavel_nome", row_r.get("responsavel", "N/A"))
-            email_resp = row_r.get("responsavel_email", "")
-            dia_semana_rot = row_r.get("dia_semana", "N/A")
-            cat_rot = row_r.get("categoria", "N/A")
-            estacao_rot = row_r.get("estacao", "N/A")
-            instrucoes_rot = row_r.get("instrucoes", "")
+        for idx_r, (r_idx, row_r) in enumerate(df_rot_exibir.iterrows()):
+            nome_resp = obter_valor_coluna(row_r, ["nome", "responsavel", "auditor", "title"])
+            email_resp = obter_valor_coluna(row_r, ["email", "e-mail", "mail"], padrao="")
+            dia_semana_rot = obter_valor_coluna(row_r, ["dia", "semana"])
+            cat_rot = obter_valor_coluna(row_r, ["categoria", "cat"])
+            estacao_rot = obter_valor_coluna(row_r, ["estacao", "setor", "area", "local"])
+            instrucoes_rot = obter_valor_coluna(row_r, ["instrucoes", "obs", "objetivo"], padrao="")
 
             executou_semana = False
             if not df_dados.empty:
-                col_auditor = next((c for c in df_dados.columns if "auditor" in c), None)
+                col_auditor = next((c for c in df_dados.columns if "auditor" in c or "responsavel" in c), None)
                 col_data = next((c for c in df_dados.columns if "data" in c or "created" in c), None)
 
                 if col_auditor and col_data:
@@ -565,7 +584,8 @@ with aba3:
                     st.markdown(f"### 🟦 Rotina: {cat_rot}")
                     st.caption(f"**Dia Programado:** 📅 `{dia_semana_rot}`")
                     st.write(f"👤 **Responsável:** {nome_resp}")
-                    st.write(f"📧 **E-mail:** `{email_resp}`")
+                    if email_resp:
+                        st.write(f"📧 **E-mail:** `{email_resp}`")
                     st.write(f"📍 **Setor / Área:** {estacao_rot}")
                     if instrucoes_rot:
                         st.write(f"📝 **Instruções:** {instrucoes_rot}")
