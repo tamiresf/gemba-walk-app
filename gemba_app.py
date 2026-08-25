@@ -14,12 +14,26 @@ st.set_page_config(
 )
 
 # --- 2. CARREGAR URLs DOS SECRETS ---
-# Certifique-se de configurar estas chaves no seu arquivo .streamlit/secrets.toml
-WEBHOOK_CRIAR = st.secrets.get("POWER_AUTOMATE_CRIAR_URL", "https://defaultcd14821755e24b4e86f837f80bf5ae.f3.environment.api.powerplatform.com:443/powerautomate/automations/direct/cu/08/workflows/24e560b839864d9b91720231dbb6584e/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=cZEo_aNlKwbk9kP84Yu_OITxnl6wZqrM-RCGjOZXzss")
-WEBHOOK_RESOLVER = st.secrets.get("POWER_AUTOMATE_RESOLVER_URL", "https://defaultcd14821755e24b4e86f837f80bf5ae.f3.environment.api.powerplatform.com:443/powerautomate/automations/direct/cu/06/workflows/a1df9787e2b94d19ab5643e165491bc8/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=yLF9HKRO6XtG75qHGA_U7X1g-NMCcnT4QHGXPdUkiFA")
-WEBHOOK_LER = st.secrets.get("POWER_AUTOMATE_LER_URL", "https://defaultcd14821755e24b4e86f837f80bf5ae.f3.environment.api.powerplatform.com:443/powerautomate/automations/direct/cu/27/workflows/62a264c57b214336aa6205ae2fb47c59/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=JJ2EZPMarOKgpxHQNzHh0ZR7N5LKtQ53eEO1wB-eePM")
-WEBHOOK_ROTINAS_CRIAR = st.secrets.get("POWER_AUTOMATE_ROTINAS_CRIAR_URL", "https://defaultcd14821755e24b4e86f837f80bf5ae.f3.environment.api.powerplatform.com:443/powerautomate/automations/direct/cu/27/workflows/b5825bef53af44be9972fed8172241ee/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=3IQZAY4rMptiHzx_F1QYUjqIsWV4HhSoeQWsGloCAMU")
-WEBHOOK_ROTINAS_LER = st.secrets.get("POWER_AUTOMATE_ROTINAS_LER_URL", "https://defaultcd14821755e24b4e86f837f80bf5ae.f3.environment.api.powerplatform.com:443/powerautomate/automations/direct/cu/09/workflows/4c0c6254cf6a451f8b3180c48f3a8343/triggers/manual/paths/invoke?api-version=1")
+WEBHOOK_CRIAR = st.secrets.get(
+    "POWER_AUTOMATE_CRIAR_URL",
+    "https://defaultcd14821755e24b4e86f837f80bf5ae.f3.environment.api.powerplatform.com:443/powerautomate/automations/direct/cu/08/workflows/24e560b839864d9b91720231dbb6584e/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=cZEo_aNlKwbk9kP84Yu_OITxnl6wZqrM-RCGjOZXzss",
+)
+WEBHOOK_RESOLVER = st.secrets.get(
+    "POWER_AUTOMATE_RESOLVER_URL",
+    "https://defaultcd14821755e24b4e86f837f80bf5ae.f3.environment.api.powerplatform.com:443/powerautomate/automations/direct/cu/06/workflows/a1df9787e2b94d19ab5643e165491bc8/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=yLF9HKRO6XtG75qHGA_U7X1g-NMCcnT4QHGXPdUkiFA",
+)
+WEBHOOK_LER = st.secrets.get(
+    "POWER_AUTOMATE_LER_URL",
+    "https://defaultcd14821755e24b4e86f837f80bf5ae.f3.environment.api.powerplatform.com:443/powerautomate/automations/direct/cu/27/workflows/62a264c57b214336aa6205ae2fb47c59/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=JJ2EZPMarOKgpxHQNzHh0ZR7N5LKtQ53eEO1wB-eePM",
+)
+WEBHOOK_ROTINAS_CRIAR = st.secrets.get(
+    "POWER_AUTOMATE_ROTINAS_CRIAR_URL",
+    "https://defaultcd14821755e24b4e86f837f80bf5ae.f3.environment.api.powerplatform.com:443/powerautomate/automations/direct/cu/27/workflows/b5825bef53af44be9972fed8172241ee/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=3IQZAY4rMptiHzx_F1QYUjqIsWV4HhSoeQWsGloCAMU",
+)
+WEBHOOK_ROTINAS_LER = st.secrets.get(
+    "POWER_AUTOMATE_ROTINAS_LER_URL",
+    "https://defaultcd14821755e24b4e86f837f80bf5ae.f3.environment.api.powerplatform.com:443/powerautomate/automations/direct/cu/09/workflows/4c0c6254cf6a451f8b3180c48f3a8343/triggers/manual/paths/invoke?api-version=1",
+)
 
 # --- 3. LISTAS FIXAS ---
 EMAILS_CORPORATIVOS = sorted(
@@ -139,9 +153,12 @@ if "df_override" in st.session_state:
 else:
     df_dados = buscar_dados_servidor(WEBHOOK_LER)
 
-df_rotinas = buscar_dados_servidor(WEBHOOK_ROTINAS_LER)
-if df_rotinas.empty and "rotinas_local" in st.session_state:
-    df_rotinas = st.session_state["rotinas_local"]
+# Leitura direta das rotinas via Power Automate
+df_rotinas_remoto = buscar_dados_servidor(WEBHOOK_ROTINAS_LER)
+if "rotinas_local" in st.session_state and not st.session_state["rotinas_local"].empty:
+    df_rotinas = pd.concat([df_rotinas_remoto, st.session_state["rotinas_local"]], ignore_index=True)
+else:
+    df_rotinas = df_rotinas_remoto
 
 # Identificar a coluna de status
 col_status = next((c for c in df_dados.columns if "status" in c), None) if not df_dados.empty else None
