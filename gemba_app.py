@@ -27,9 +27,15 @@ WEBHOOK_LER = st.secrets.get(
     "https://defaultcd14821755e24b4e86f837f80bf5ae.f3.environment.api.powerplatform.com:443/powerautomate/automations/direct/cu/27/workflows/62a264c57b214336aa6205ae2fb47c59/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=JJ2EZPMarOKgpxHQNzHh0ZR7N5LKtQ53eEO1wB-eePM",
 )
 
-# NOVO WEBHOOK PARA SALVAR E LER ROTINAS
-WEBHOOK_ROTINAS_CRIAR = st.secrets.get("POWER_AUTOMATE_ROTINAS_CRIAR_URL", "https://defaultcd14821755e24b4e86f837f80bf5ae.f3.environment.api.powerplatform.com:443/powerautomate/automations/direct/cu/27/workflows/b5825bef53af44be9972fed8172241ee/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=3IQZAY4rMptiHzx_F1QYUjqIsWV4HhSoeQWsGloCAMU")
-WEBHOOK_ROTINAS_LER = st.secrets.get("POWER_AUTOMATE_ROTINAS_LER_URL", "https://defaultcd14821755e24b4e86f837f80bf5ae.f3.environment.api.powerplatform.com:443/powerautomate/automations/direct/cu/09/workflows/4c0c6254cf6a451f8b3180c48f3a8343/triggers/manual/paths/invoke?api-version=1")
+# WEBHOOKS DE ROTINAS
+WEBHOOK_ROTINAS_CRIAR = st.secrets.get(
+    "POWER_AUTOMATE_ROTINAS_CRIAR_URL",
+    "https://defaultcd14821755e24b4e86f837f80bf5ae.f3.environment.api.powerplatform.com:443/powerautomate/automations/direct/cu/27/workflows/b5825bef53af44be9972fed8172241ee/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=3IQZAY4rMptiHzx_F1QYUjqIsWV4HhSoeQWsGloCAMU",
+)
+WEBHOOK_ROTINAS_LER = st.secrets.get(
+    "POWER_AUTOMATE_ROTINAS_LER_URL",
+    "https://defaultcd14821755e24b4e86f837f80bf5ae.f3.environment.api.powerplatform.com:443/powerautomate/automations/direct/cu/09/workflows/4c0c6254cf6a451f8b3180c48f3a8343/triggers/manual/paths/invoke?api-version=1",
+)
 
 # --- 3. LISTAS FIXAS ---
 EMAILS_CORPORATIVOS = sorted(
@@ -120,9 +126,7 @@ def buscar_dados_servidor():
                 df_dados = pd.DataFrame(dados_json)
             elif isinstance(dados_json, dict):
                 for chave in ["value", "dados", "items", "body"]:
-                    if chave in dados_json and isinstance(
-                        dados_json[chave], list
-                    ):
+                    if chave in dados_json and isinstance(dados_json[chave], list):
                         df_dados = pd.DataFrame(dados_json[chave])
                         break
                 if df_dados.empty:
@@ -157,9 +161,7 @@ def buscar_rotinas_servidor():
                 df_rotinas = pd.DataFrame(dados_json)
             elif isinstance(dados_json, dict):
                 for chave in ["value", "dados", "items", "body"]:
-                    if chave in dados_json and isinstance(
-                        dados_json[chave], list
-                    ):
+                    if chave in dados_json and isinstance(dados_json[chave], list):
                         df_rotinas = pd.DataFrame(dados_json[chave])
                         break
                 if df_rotinas.empty:
@@ -526,10 +528,9 @@ with aba3:
     st.divider()
     st.markdown("### 🟦 Quadro de Rotinas Ativas")
 
-    # Obter DataFrame de Rotinas (servidor ou sessão local)
+    # Obter DataFrame de Rotinas
     df_rot_exibir = df_rotinas.copy() if not df_rotinas.empty else st.session_state.get("rotinas_local", pd.DataFrame())
 
-    # Ferramenta para inspecionar os nomes das colunas trazidas pelo Power Automate
     with st.expander("🛠️ Debug: Diagnóstico de Dados de Rotinas", expanded=False):
         st.write("Variável `WEBHOOK_ROTINAS_LER` configurada?:", bool(WEBHOOK_ROTINAS_LER))
         st.write("Registros encontrados:", len(df_rot_exibir))
@@ -538,12 +539,12 @@ with aba3:
             st.dataframe(df_rot_exibir)
 
     if df_rot_exibir.empty:
-        st.info("Nenhuma rotina cadastrada ainda ou a URL do `POWER_AUTOMATE_ROTINAS_LER_URL` não retornou dados. Use o campo acima para cadastrar.")
+        st.info("Nenhuma rotina cadastrada ainda ou o webhook não retornou dados.")
     else:
         semana_atual = datetime.now().isocalendar()[1]
         ano_atual = datetime.now().year
 
-        # Função auxiliar para encontrar dinamicamente o valor independente do nome exato da coluna no SharePoint
+        # Função auxiliar flexível para mapear nomes de colunas vindo do SharePoint
         def obter_valor_coluna(row, palavras_chave, padrao="N/A"):
             for col in row.index:
                 col_str = str(col).lower()
@@ -581,41 +582,55 @@ with aba3:
 
             with cols_r[idx_r % 2]:
                 with st.container(border=True):
-                    st.markdown(f"### 🟦 Rotina: {cat_rot}")
-                    st.caption(f"**Dia Programado:** 📅 `{dia_semana_rot}`")
-                    st.write(f"👤 **Responsável:** {nome_resp}")
-                    if email_resp:
-                        st.write(f"📧 **E-mail:** `{email_resp}`")
-                    st.write(f"📍 **Setor / Área:** {estacao_rot}")
-                    if instrucoes_rot:
-                        st.write(f"📝 **Instruções:** {instrucoes_rot}")
-
-                    st.divider()
+                    st.markdown(f"### 📅 {dia_semana_rot} - {cat_rot}")
+                    st.caption(f"**Responsável:** {nome_resp} ({email_resp})")
+                    st.write(f"**Área / Estação:** {estacao_rot}")
+                    if instrucoes_rot and instrucoes_rot != "N/A":
+                        st.write(f"**Instruções:** {instrucoes_rot}")
 
                     if executou_semana:
-                        st.success("✅ **Status desta semana:** Tarefa Executada")
+                        st.success("✅ Rotina Realizada esta Semana!")
                     else:
-                        st.error("❌ **Status desta semana:** Pendente / Não Executada")
+                        st.warning("⚠️ Pendente de Realização esta Semana")
 
 # --- ABA 4: DASHBOARD ---
 with aba4:
-    st.subheader("📊 Indicadores do Gemba Walk")
+    st.subheader("📊 Métricas e Desempenho do Gemba Walk")
+    if df_dados.empty:
+        st.info("Sem dados suficientes para exibir métricas no momento.")
+    else:
+        m1, m2, m3 = st.columns(3)
+        total_regs = len(df_dados)
+        
+        col_st = next((c for c in df_dados.columns if "status" in c), None)
+        if col_st:
+            pendentes_cnt = len(df_dados[df_dados[col_st].astype(str).str.lower().str.contains("pendente")])
+            resolvidos_cnt = len(df_dados[df_dados[col_st].astype(str).str.lower().str.contains("resolvido|finalizado")])
+        else:
+            pendentes_cnt = 0
+            resolvidos_cnt = 0
 
-    if not df_dados.empty and "status_clean" in df_dados.columns:
-        total_registros = len(df_dados)
-        qtd_pendentes = (df_dados["status_clean"] == "pendente").sum()
-        qtd_resolvidos = (df_dados["status_clean"] == "resolvido").sum()
-
-        c1, c2, c3 = st.columns(3)
-        c1.metric("Total de Registros", total_registros)
-        c2.metric("Pendentes", qtd_pendentes)
-        c3.metric("Resolvidos", qtd_resolvidos)
+        m1.metric("Total de Inspeções", total_regs)
+        m2.metric("Pendências Abertas", pendentes_cnt)
+        m3.metric("Concluídas / Resolvidas", resolvidos_cnt)
 
         st.divider()
-        st.markdown("**Problemas Encontrados por Categoria**")
 
-        col_cat = next((c for c in df_dados.columns if "categoria" in c), None)
-        if col_cat:
-            st.bar_chart(df_dados[col_cat].value_counts())
-    else:
-        st.info("Aguardando registros para exibir indicadores.")
+        col_chart1, col_chart2 = st.columns(2)
+        with col_chart1:
+            st.markdown("#### Inspeções por Categoria")
+            col_cat = next((c for c in df_dados.columns if "categoria" in c), None)
+            if col_cat:
+                cat_counts = df_dados[col_cat].value_counts()
+                st.bar_chart(cat_counts)
+            else:
+                st.caption("Coluna de categoria não identificada.")
+
+        with col_chart2:
+            st.markdown("#### Inspeções por Auditor")
+            col_aud = next((c for c in df_dados.columns if "auditor" in c or "responsavel" in c), None)
+            if col_aud:
+                aud_counts = df_dados[col_aud].value_counts()
+                st.bar_chart(aud_counts)
+            else:
+                st.caption("Coluna de auditor não identificada.")
