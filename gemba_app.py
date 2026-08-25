@@ -197,15 +197,25 @@ with aba1:
         causa = st.text_area("Causa aparente?")
         acao_imediata = st.text_area("Ação imediata?")
 
-        responsavel_email = st.selectbox(
-            "E-mail do Responsável*",
-            options=EMAILS_CORPORATIVOS,
-            index=None,
-            placeholder="Selecione ou digite o e-mail...",
-            help="Digite as primeiras letras do e-mail para filtrar a lista.",
-        )
+        col_resp, col_prazo = st.columns(2)
+        
+        with col_resp:
+            responsavel_email = st.selectbox(
+                "E-mail do Responsável*",
+                options=EMAILS_CORPORATIVOS,
+                index=None,
+                placeholder="Selecione ou digite o e-mail...",
+                help="Digite as primeiras letras do e-mail para filtrar a lista.",
+            )
 
-        prazo = st.date_input("Prazo para Solução", value=date.today())
+        with col_prazo:
+            # Destaque visual chamativo para o campo de Prazo
+            st.markdown("🚨 **Atenção ao Prazo Acordado**")
+            prazo = st.date_input(
+                "📅 Prazo para Solução*",
+                value=date.today(),
+                help="⚠️ DEFINA UM PRAZO ACORDADO COM O RESPONSÁVEL!",
+            )
 
         submitted = st.form_submit_button("Salvar Registro")
 
@@ -296,7 +306,7 @@ with aba2:
                         st.write(
                             f"**Responsável:** {row.get('responsavel', '')}"
                         )
-                        st.write(f"**Prazo:** {row.get('prazo', '')}")
+                        st.markdown(f"🗓️ **Prazo:** `{row.get('prazo', 'N/A')}`")
 
                         if st.button(
                             "✅ Resolvido", key=f"btn_res_{display_id}_{original_idx}"
