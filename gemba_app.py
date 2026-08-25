@@ -210,7 +210,7 @@ with aba1:
 
         with col_prazo:
             # Destaque visual chamativo para o campo de Prazo
-            st.markdown("🚨 **Atenção **")
+            st.markdown("🚨 **Atenção**")
             prazo = st.date_input(
                 "📅 Prazo para Solução*",
                 value=date.today(),
