@@ -180,46 +180,37 @@ aba1, aba2, aba3 = st.tabs(
 
 # --- ABA 1: NOVO REGISTRO ---
 with aba1:
-    st.subheader("Informações Gerais")
-    col1, col2 = st.columns(2)
-    with col1:
-        auditor = st.selectbox(
-            "Nome do Auditor/Gestor*",
-            options=AUDITORES_GESTORES,
-            index=None,
-            placeholder="Selecione ou digite o nome...",
-            help="Digite as primeiras letras do nome para filtrar a lista.",
-            key="auditor_input",
+    # Uso do st.form com clear_on_submit=True para limpar a tela após o envio
+    with st.form("form_novo_registro", clear_on_submit=True):
+        st.subheader("Informações Gerais")
+        col1, col2 = st.columns(2)
+        with col1:
+            auditor = st.selectbox(
+                "Nome do Auditor/Gestor*",
+                options=AUDITORES_GESTORES,
+                index=None,
+                placeholder="Selecione ou digite o nome...",
+                help="Digite as primeiras letras do nome para filtrar a lista.",
+                key="auditor_input",
+            )
+        with col2:
+            estacao = st.text_input("Área / Estação*", key="estacao_input")
+
+        categoria_sel = st.selectbox(
+            "Selecione a Categoria*", list(CATEGORIAS.keys()), key="cat_input"
         )
-    with col2:
-        estacao = st.text_input("Área / Estação*", key="estacao_input")
+        st.info(f"💡 **O que observar:** {CATEGORIAS[categoria_sel]}")
 
-    categoria_sel = st.selectbox(
-        "Selecione a Categoria*", list(CATEGORIAS.keys()), key="cat_input"
-    )
-    st.info(f"💡 **O que observar:** {CATEGORIAS[categoria_sel]}")
+        status_op = st.radio(
+            "Status da Inspeção*",
+            ["Conforme", "Não Conforme"],
+            horizontal=True,
+            key="status_op_input",
+        )
 
-    status_op = st.radio(
-        "Status da Inspeção*",
-        ["Conforme", "Não Conforme"],
-        horizontal=True,
-        key="status_op_input",
-    )
+        st.divider()
 
-    st.divider()
-
-    # Variáveis default para o caso "Conforme"
-    problema = ""
-    local = ""
-    impacto = ""
-    causa = ""
-    acao_imediata = ""
-    responsavel_email = ""
-    prazo = date.today()
-
-    # Exibe campos detalhados SOMENTE se for "Não Conforme"
-    if status_op == "Não Conforme":
-        st.markdown("**Detalhes da Inspeção**")
+        st.markdown("**Detalhes da Inspeção (Preencher se 'Não Conforme')**")
         problema = st.text_area("Qual foi o problema?*")
         local = st.text_input("Onde ocorreu?*")
         impacto = st.text_area("Qual o impacto?")
@@ -245,7 +236,7 @@ with aba1:
                 help="⚠️ DEFINA UM PRAZO ACORDADO COM O RESPONSÁVEL!",
             )
 
-    submitted = st.button("Salvar Registro", type="primary")
+        submitted = st.form_submit_button("Salvar Registro", type="primary")
 
     if submitted:
         if not auditor or not estacao:
@@ -284,12 +275,11 @@ with aba1:
                 with st.spinner("Enviando registro ao Microsoft Lists..."):
                     res = requests.post(WEBHOOK_CRIAR, json=payload, timeout=15)
 
-                    # Trata sucesso direto (200/202) e o caso 502 (onde o registro grava no SharePoint mas expira o response HTTP)
                     if res.status_code in [200, 202, 502]:
                         time.sleep(1.5)
                         st.cache_data.clear()
                         st.session_state.pop("df_override", None)
-                        st.success(f"Registro '{status_op}' salvo com sucesso!")
+                        st.success(f"Registro '{status_op}' salvo com sucesso! O formulário foi limpo.")
                         st.rerun()
                     else:
                         st.error(f"Erro {res.status_code}: {res.text}")
@@ -297,7 +287,7 @@ with aba1:
             except requests.exceptions.Timeout:
                 st.cache_data.clear()
                 st.session_state.pop("df_override", None)
-                st.success(f"Registro '{status_op}' processado com sucesso!")
+                st.success(f"Registro '{status_op}' processado com sucesso! O formulário foi limpo.")
                 st.rerun()
             except Exception as e:
                 st.error(f"Falha de conexão com o Power Automate: {e}")
