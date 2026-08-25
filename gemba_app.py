@@ -14,9 +14,18 @@ st.set_page_config(
 )
 
 # --- 2. CARREGAR URLs DOS SECRETS ---
-WEBHOOK_CRIAR = st.secrets.get("POWER_AUTOMATE_CRIAR_URL", "https://defaultcd14821755e24b4e86f837f80bf5ae.f3.environment.api.powerplatform.com:443/powerautomate/automations/direct/cu/08/workflows/24e560b839864d9b91720231dbb6584e/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=cZEo_aNlKwbk9kP84Yu_OITxnl6wZqrM-RCGjOZXzss")
-WEBHOOK_RESOLVER = st.secrets.get("POWER_AUTOMATE_RESOLVER_URL", "https://defaultcd14821755e24b4e86f837f80bf5ae.f3.environment.api.powerplatform.com:443/powerautomate/automations/direct/cu/06/workflows/a1df9787e2b94d19ab5643e165491bc8/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=yLF9HKRO6XtG75qHGA_U7X1g-NMCcnT4QHGXPdUkiFA")
-WEBHOOK_LER = st.secrets.get("POWER_AUTOMATE_LER_URL", "https://defaultcd14821755e24b4e86f837f80bf5ae.f3.environment.api.powerplatform.com:443/powerautomate/automations/direct/cu/27/workflows/62a264c57b214336aa6205ae2fb47c59/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=JJ2EZPMarOKgpxHQNzHh0ZR7N5LKtQ53eEO1wB-eePM")
+WEBHOOK_CRIAR = st.secrets.get(
+    "POWER_AUTOMATE_CRIAR_URL",
+    "https://defaultcd14821755e24b4e86f837f80bf5ae.f3.environment.api.powerplatform.com:443/powerautomate/automations/direct/cu/08/workflows/24e560b839864d9b91720231dbb6584e/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=cZEo_aNlKwbk9kP84Yu_OITxnl6wZqrM-RCGjOZXzss",
+)
+WEBHOOK_RESOLVER = st.secrets.get(
+    "POWER_AUTOMATE_RESOLVER_URL",
+    "https://defaultcd14821755e24b4e86f837f80bf5ae.f3.environment.api.powerplatform.com:443/powerautomate/automations/direct/cu/06/workflows/a1df9787e2b94d19ab5643e165491bc8/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=yLF9HKRO6XtG75qHGA_U7X1g-NMCcnT4QHGXPdUkiFA",
+)
+WEBHOOK_LER = st.secrets.get(
+    "POWER_AUTOMATE_LER_URL",
+    "https://defaultcd14821755e24b4e86f837f80bf5ae.f3.environment.api.powerplatform.com:443/powerautomate/automations/direct/cu/27/workflows/62a264c57b214336aa6205ae2fb47c59/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=JJ2EZPMarOKgpxHQNzHh0ZR7N5LKtQ53eEO1wB-eePM",
+)
 
 # --- 3. LISTAS FIXAS ---
 EMAILS_CORPORATIVOS = sorted(
@@ -84,9 +93,9 @@ CATEGORIAS = {
 @st.cache_data(ttl=2, show_spinner=False)
 def buscar_dados_servidor():
     try:
-        res = requests.get(WEBHOOK_LER, timeout=10)
+        res = requests.get(WEBHOOK_LER, timeout=15)
         if res.status_code != 200:
-            res = requests.post(WEBHOOK_LER, json={}, timeout=10)
+            res = requests.post(WEBHOOK_LER, json={}, timeout=15)
 
         if res.status_code in [200, 202]:
             dados_json = res.json()
@@ -130,9 +139,11 @@ else:
     df_dados = buscar_dados_servidor()
 
 # Identificar a coluna de status
-col_status = next(
-    (c for c in df_dados.columns if "status" in c), None
-) if not df_dados.empty else None
+col_status = (
+    next((c for c in df_dados.columns if "status" in c), None)
+    if not df_dados.empty
+    else None
+)
 
 if not df_dados.empty and col_status:
     df_dados["status_clean"] = (
@@ -140,13 +151,17 @@ if not df_dados.empty and col_status:
     )
 
 # Identificar colunas de ID
-col_id0 = next(
-    (c for c in df_dados.columns if c == "id0"), None
-) if not df_dados.empty else None
+col_id0 = (
+    next((c for c in df_dados.columns if c == "id0"), None)
+    if not df_dados.empty
+    else None
+)
 
-col_sp_id = next(
-    (c for c in df_dados.columns if c in ["id", "id_unico", "title"]), None
-) if not df_dados.empty else None
+col_sp_id = (
+    next((c for c in df_dados.columns if c in ["id", "id_unico", "title"]), None)
+    if not df_dados.empty
+    else None
+)
 
 # --- DIAGNÓSTICO DA CONEXÃO ---
 with st.sidebar.expander("🛠️ Diagnóstico do Sistema"):
@@ -234,9 +249,15 @@ with aba1:
 
     if submitted:
         if not auditor or not estacao:
-            st.error("Preencha as Informações Gerais obrigatórias (Auditor e Área/Estação).")
-        elif status_op == "Não Conforme" and (not problema or not responsavel_email):
-            st.error("Preencha todos os campos obrigatórios (*) do detalhamento da Não Conformidade.")
+            st.error(
+                "Preencha as Informações Gerais obrigatórias (Auditor e Área/Estação)."
+            )
+        elif status_op == "Não Conforme" and (
+            not problema or not responsavel_email
+        ):
+            st.error(
+                "Preencha todos os campos obrigatórios (*) do detalhamento da Não Conformidade."
+            )
         else:
             id_unico = str(uuid.uuid4())[:8]
 
@@ -247,13 +268,13 @@ with aba1:
                 "data_criacao": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                 "estacao": str(estacao),
                 "categoria": str(categoria_sel),
-                "status_inspecao": str(status_op),  # Nova coluna com "Conforme" ou "Não Conforme"
-                "problema": str(problema),
-                "local": str(local),
-                "impacto": str(impacto),
-                "causa": str(causa),
-                "acao_imediata": str(acao_imediata),
-                "responsavel": str(responsavel_email),
+                "status_inspecao": str(status_op),
+                "problema": str(problema) if status_op == "Não Conforme" else "N/A - Conforme",
+                "local": str(local) if status_op == "Não Conforme" else str(estacao),
+                "impacto": str(impacto) if status_op == "Não Conforme" else "",
+                "causa": str(causa) if status_op == "Não Conforme" else "",
+                "acao_imediata": str(acao_imediata) if status_op == "Não Conforme" else "",
+                "responsavel": str(responsavel_email) if status_op == "Não Conforme" else str(auditor),
                 "prazo": prazo.strftime("%Y-%m-%d") if status_op == "Não Conforme" else "",
                 "status": "Finalizado" if status_op == "Conforme" else "Pendente",
                 "data_solucao": datetime.now().strftime("%Y-%m-%d %H:%M:%S") if status_op == "Conforme" else "",
@@ -261,7 +282,8 @@ with aba1:
 
             try:
                 with st.spinner("Gravando no Microsoft Lists..."):
-                    res = requests.post(WEBHOOK_CRIAR, json=payload, timeout=10)
+                    # Timeout estendido para 30 segundos
+                    res = requests.post(WEBHOOK_CRIAR, json=payload, timeout=30)
                     if res.status_code in [200, 202]:
                         time.sleep(2)
                         st.cache_data.clear()
@@ -270,6 +292,10 @@ with aba1:
                         st.rerun()
                     else:
                         st.error(f"Erro {res.status_code}: {res.text}")
+            except requests.exceptions.Timeout:
+                st.warning(
+                    "O servidor demorou para responder (Timeout), mas a solicitação foi enviada. Recarregue a página para checar o registro."
+                )
             except Exception as e:
                 st.error(f"Falha de conexão com o Power Automate: {e}")
 
@@ -287,8 +313,16 @@ with aba2:
         else:
             cols = st.columns(2)
             for idx, (original_idx, row) in enumerate(pendentes.iterrows()):
-                val_id0 = str(row.get(col_id0)) if col_id0 and pd.notna(row.get(col_id0)) else None
-                val_sp_id = str(row.get(col_sp_id)) if col_sp_id and pd.notna(row.get(col_sp_id)) else str(idx)
+                val_id0 = (
+                    str(row.get(col_id0))
+                    if col_id0 and pd.notna(row.get(col_id0))
+                    else None
+                )
+                val_sp_id = (
+                    str(row.get(col_sp_id))
+                    if col_sp_id and pd.notna(row.get(col_sp_id))
+                    else str(idx)
+                )
 
                 display_id = val_id0 if val_id0 else val_sp_id
 
@@ -315,7 +349,8 @@ with aba2:
                         st.markdown(f"🗓️ **Prazo:** `{row.get('prazo', 'N/A')}`")
 
                         if st.button(
-                            "✅ Resolvido", key=f"btn_res_{display_id}_{original_idx}"
+                            "✅ Resolvido",
+                            key=f"btn_res_{display_id}_{original_idx}",
                         ):
                             payload_sol = {
                                 "id0": val_id0 if val_id0 else val_sp_id,
@@ -323,30 +358,47 @@ with aba2:
                                 "ID": val_sp_id,
                                 "status": "Resolvido",
                                 "Status": "Resolvido",
-                                "data_solucao": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                                "data_solucao": datetime.now().strftime(
+                                    "%Y-%m-%d %H:%M:%S"
+                                ),
                             }
 
                             try:
-                                with st.spinner(f"Enviando atualização para o Power Automate..."):
+                                with st.spinner(
+                                    "Enviando atualização para o Power Automate..."
+                                ):
                                     res_sol = requests.post(
                                         WEBHOOK_RESOLVER,
                                         json=payload_sol,
-                                        timeout=10,
+                                        timeout=30,
                                     )
 
                                     if res_sol.status_code in [200, 202]:
                                         if col_status:
-                                            df_dados.loc[original_idx, col_status] = "Resolvido"
-                                        df_dados.loc[original_idx, "status_clean"] = "resolvido"
-                                        st.session_state["df_override"] = df_dados
+                                            df_dados.loc[
+                                                original_idx, col_status
+                                            ] = "Resolvido"
+                                        df_dados.loc[
+                                            original_idx, "status_clean"
+                                        ] = "resolvido"
+                                        st.session_state["df_override"] = (
+                                            df_dados
+                                        )
 
                                         st.cache_data.clear()
-                                        st.toast("Item marcado como Resolvido!", icon="✅")
+                                        st.toast(
+                                            "Item marcado como Resolvido!",
+                                            icon="✅",
+                                        )
                                         st.rerun()
                                     else:
                                         st.error(
                                             f"Erro Power Automate ({res_sol.status_code}): {res_sol.text}"
                                         )
+                            except requests.exceptions.Timeout:
+                                st.warning(
+                                    "Tempo de resposta excedido, mas a atualização pode ter sido processada."
+                                )
                             except Exception as e:
                                 st.error(f"Falha de conexão com a API: {e}")
 
