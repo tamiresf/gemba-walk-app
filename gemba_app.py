@@ -165,31 +165,45 @@ aba1, aba2, aba3 = st.tabs(
 
 # --- ABA 1: NOVO REGISTRO ---
 with aba1:
-    with st.form("form_registro", clear_on_submit=True):
-        st.subheader("Informações Gerais")
-        col1, col2 = st.columns(2)
-        with col1:
-            auditor = st.selectbox(
-                "Nome do Auditor/Gestor*",
-                options=AUDITORES_GESTORES,
-                index=None,
-                placeholder="Selecione ou digite o nome...",
-                help="Digite as primeiras letras do nome para filtrar a lista.",
-            )
-        with col2:
-            estacao = st.text_input("Área / Estação*")
-
-        categoria_sel = st.selectbox(
-            "Selecione a Categoria", list(CATEGORIAS.keys())
+    st.subheader("Informações Gerais")
+    col1, col2 = st.columns(2)
+    with col1:
+        auditor = st.selectbox(
+            "Nome do Auditor/Gestor*",
+            options=AUDITORES_GESTORES,
+            index=None,
+            placeholder="Selecione ou digite o nome...",
+            help="Digite as primeiras letras do nome para filtrar a lista.",
+            key="auditor_input",
         )
-        st.info(f"💡 **O que observar:** {CATEGORIAS[categoria_sel]}")
+    with col2:
+        estacao = st.text_input("Área / Estação*", key="estacao_input")
 
-        status_op = st.radio(
-            "Status da Inspeção", ["Conforme", "Não Conforme"], horizontal=True
-        )
+    categoria_sel = st.selectbox(
+        "Selecione a Categoria*", list(CATEGORIAS.keys()), key="cat_input"
+    )
+    st.info(f"💡 **O que observar:** {CATEGORIAS[categoria_sel]}")
 
-        st.divider()
+    status_op = st.radio(
+        "Status da Inspeção*",
+        ["Conforme", "Não Conforme"],
+        horizontal=True,
+        key="status_op_input",
+    )
 
+    st.divider()
+
+    # Variáveis default para o caso "Conforme"
+    problema = ""
+    local = ""
+    impacto = ""
+    causa = ""
+    acao_imediata = ""
+    responsavel_email = ""
+    prazo = date.today()
+
+    # Exibe campos detalhados SOMENTE se for "Não Conforme"
+    if status_op == "Não Conforme":
         st.markdown("**Detalhes da Inspeção**")
         problema = st.text_area("Qual foi o problema?*")
         local = st.text_input("Onde ocorreu?*")
@@ -198,7 +212,7 @@ with aba1:
         acao_imediata = st.text_area("Ação imediata?")
 
         col_resp, col_prazo = st.columns(2)
-        
+
         with col_resp:
             responsavel_email = st.selectbox(
                 "E-mail do Responsável*",
@@ -209,63 +223,55 @@ with aba1:
             )
 
         with col_prazo:
-            # Destaque visual chamativo para o campo de Prazo
-            st.markdown("🚨 **Atenção**")
+            st.markdown("🚨 **Atenção ao Prazo Acordado**")
             prazo = st.date_input(
                 "📅 Prazo para Solução*",
                 value=date.today(),
                 help="⚠️ DEFINA UM PRAZO ACORDADO COM O RESPONSÁVEL!",
             )
 
-        submitted = st.form_submit_button("Salvar Registro")
+    submitted = st.button("Salvar Registro", type="primary")
 
-        if submitted:
-            if status_op == "Não Conforme":
-                if (
-                    not auditor
-                    or not estacao
-                    or not problema
-                    or not responsavel_email
-                ):
-                    st.error("Preencha todos os campos obrigatórios (*).")
-                else:
-                    id_unico = str(uuid.uuid4())[:8]
+    if submitted:
+        if not auditor or not estacao:
+            st.error("Preencha as Informações Gerais obrigatórias (Auditor e Área/Estação).")
+        elif status_op == "Não Conforme" and (not problema or not responsavel_email):
+            st.error("Preencha todos os campos obrigatórios (*) do detalhamento da Não Conformidade.")
+        else:
+            id_unico = str(uuid.uuid4())[:8]
 
-                    payload = {
-                        "id0": str(id_unico),
-                        "id": str(id_unico),
-                        "auditor": str(auditor),
-                        "data_criacao": datetime.now().strftime(
-                            "%Y-%m-%d %H:%M:%S"
-                        ),
-                        "estacao": str(estacao),
-                        "categoria": str(categoria_sel),
-                        "problema": str(problema),
-                        "local": str(local),
-                        "impacto": str(impacto),
-                        "causa": str(causa),
-                        "acao_imediata": str(acao_imediata),
-                        "responsavel": str(responsavel_email),
-                        "prazo": prazo.strftime("%Y-%m-%d"),
-                        "status": "Pendente",
-                        "data_solucao": "",
-                    }
+            payload = {
+                "id0": str(id_unico),
+                "id": str(id_unico),
+                "auditor": str(auditor),
+                "data_criacao": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                "estacao": str(estacao),
+                "categoria": str(categoria_sel),
+                "status_inspecao": str(status_op),  # Nova coluna com "Conforme" ou "Não Conforme"
+                "problema": str(problema),
+                "local": str(local),
+                "impacto": str(impacto),
+                "causa": str(causa),
+                "acao_imediata": str(acao_imediata),
+                "responsavel": str(responsavel_email),
+                "prazo": prazo.strftime("%Y-%m-%d") if status_op == "Não Conforme" else "",
+                "status": "Finalizado" if status_op == "Conforme" else "Pendente",
+                "data_solucao": datetime.now().strftime("%Y-%m-%d %H:%M:%S") if status_op == "Conforme" else "",
+            }
 
-                    try:
-                        with st.spinner("Gravando no Microsoft Lists..."):
-                            res = requests.post(WEBHOOK_CRIAR, json=payload, timeout=10)
-                            if res.status_code in [200, 202]:
-                                time.sleep(2)
-                                st.cache_data.clear()
-                                st.session_state.pop("df_override", None)
-                                st.success("Não conformidade salva com sucesso!")
-                                st.rerun()
-                            else:
-                                st.error(f"Erro {res.status_code}: {res.text}")
-                    except Exception as e:
-                        st.error(f"Falha de conexão com o Power Automate: {e}")
-            else:
-                st.success("Conformidade registrada com sucesso!")
+            try:
+                with st.spinner("Gravando no Microsoft Lists..."):
+                    res = requests.post(WEBHOOK_CRIAR, json=payload, timeout=10)
+                    if res.status_code in [200, 202]:
+                        time.sleep(2)
+                        st.cache_data.clear()
+                        st.session_state.pop("df_override", None)
+                        st.success(f"Registro '{status_op}' salvo com sucesso!")
+                        st.rerun()
+                    else:
+                        st.error(f"Erro {res.status_code}: {res.text}")
+            except Exception as e:
+                st.error(f"Falha de conexão com o Power Automate: {e}")
 
 # --- ABA 2: QUADRO DE POST-ITS ---
 with aba2:
@@ -283,7 +289,7 @@ with aba2:
             for idx, (original_idx, row) in enumerate(pendentes.iterrows()):
                 val_id0 = str(row.get(col_id0)) if col_id0 and pd.notna(row.get(col_id0)) else None
                 val_sp_id = str(row.get(col_sp_id)) if col_sp_id and pd.notna(row.get(col_sp_id)) else str(idx)
-                
+
                 display_id = val_id0 if val_id0 else val_sp_id
 
                 with cols[idx % 2]:
@@ -319,7 +325,7 @@ with aba2:
                                 "Status": "Resolvido",
                                 "data_solucao": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                             }
-                            
+
                             try:
                                 with st.spinner(f"Enviando atualização para o Power Automate..."):
                                     res_sol = requests.post(
@@ -327,13 +333,13 @@ with aba2:
                                         json=payload_sol,
                                         timeout=10,
                                     )
-                                    
+
                                     if res_sol.status_code in [200, 202]:
                                         if col_status:
                                             df_dados.loc[original_idx, col_status] = "Resolvido"
                                         df_dados.loc[original_idx, "status_clean"] = "resolvido"
                                         st.session_state["df_override"] = df_dados
-                                        
+
                                         st.cache_data.clear()
                                         st.toast("Item marcado como Resolvido!", icon="✅")
                                         st.rerun()
