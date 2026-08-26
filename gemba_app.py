@@ -137,7 +137,8 @@ def buscar_dados_servidor(url_webhook):
                     df = pd.DataFrame([dados_json])
 
             if not df.empty:
-                df.columns = df.columns.astype(str).str.strip().str.lower()
+                # Mantém colunas originais e gera versão normalizada
+                df.columns = [str(c).strip() for c in df.columns]
             return df
         return pd.DataFrame()
     except Exception:
@@ -199,11 +200,7 @@ else:
 
 # Filtra rotinas excluídas localmente antes de renderizar
 if not df_rotinas.empty:
-    col_id_ref = (
-        "id0"
-        if "id0" in df_rotinas.columns
-        else ("id" if "id" in df_rotinas.columns else None)
-    )
+    col_id_ref = next((c for c in df_rotinas.columns if c.lower() in ["id", "id0", "ID"]), None)
     if col_id_ref:
         df_rotinas = df_rotinas[
             ~df_rotinas[col_id_ref]
@@ -212,14 +209,14 @@ if not df_rotinas.empty:
         ]
 
 # Identificar a coluna de status
-col_status = next((c for c in df_dados.columns if "status" in c), None) if not df_dados.empty else None
+col_status = next((c for c in df_dados.columns if "status" in c.lower()), None) if not df_dados.empty else None
 
 if not df_dados.empty and col_status:
     df_dados["status_clean"] = df_dados[col_status].fillna("").astype(str).str.strip().str.lower()
 
 # Identificar colunas de ID
-col_id0 = next((c for c in df_dados.columns if c == "id0"), None) if not df_dados.empty else None
-col_sp_id = next((c for c in df_dados.columns if c in ["id", "id_unico", "title"]), None) if not df_dados.empty else None
+col_id0 = next((c for c in df_dados.columns if c.lower() == "id0"), None) if not df_dados.empty else None
+col_sp_id = next((c for c in df_dados.columns if c.lower() in ["id", "id_unico", "title"]), None) if not df_dados.empty else None
 
 # --- 6. INTERFACE PRINCIPAL ---
 st.title("🔍 Gemba Walk Digital")
@@ -370,6 +367,7 @@ with aba2:
                                 payload_sol = {
                                     "id0": val_id0 if val_id0 else val_sp_id,
                                     "id": val_sp_id,
+                                    "ID": val_sp_id,
                                     "status": "Resolvido",
                                     "data_solucao": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                                 }
@@ -421,6 +419,7 @@ with aba3:
                     payload_rotina = {
                         "id0": id_rotina,
                         "id": id_rotina,
+                        "ID": id_rotina,
                         "responsavel_nome": rotina_pessoa,
                         "responsavel_email": rotina_email,
                         "dia_semana": rotina_dia,
@@ -463,8 +462,17 @@ with aba3:
 
         cols_r = st.columns(2)
         for idx_r, (r_idx, row_r) in enumerate(df_rot_exibir.iterrows()):
-            id0_rot = str(row_r.get("id0", row_r.get("id", str(r_idx))))
-            sp_id_rot = str(row_r.get("id", row_r.get("ID", id0_rot)))
+            # Procura por ID em caixas variadas de colunas
+            id_sp_val = None
+            for col_k in ["ID", "id", "Id", "id0"]:
+                if col_k in row_r and pd.notna(row_r[col_k]):
+                    id_sp_val = str(row_r[col_k])
+                    break
+            
+            if not id_sp_val:
+                id_sp_val = str(r_idx)
+
+            id0_rot = str(row_r.get("id0", id_sp_val))
 
             nome_resp = str(row_r.get("responsavel_nome", row_r.get("responsavel", "N/A")))
             email_resp = str(row_r.get("responsavel_email", "Não informado"))
@@ -475,8 +483,8 @@ with aba3:
 
             executou_semana = False
             if not df_dados.empty:
-                col_auditor = next((c for c in df_dados.columns if "auditor" in c or "responsavel" in c), None)
-                col_data = next((c for c in df_dados.columns if "data" in c or "created" in c), None)
+                col_auditor = next((c for c in df_dados.columns if "auditor" in c.lower() or "responsavel" in c.lower()), None)
+                col_data = next((c for c in df_dados.columns if "data" in c.lower() or "created" in c.lower()), None)
 
                 if col_auditor and col_data:
                     datas_convertidas = pd.to_datetime(df_dados[col_data], errors="coerce")
@@ -493,54 +501,65 @@ with aba3:
                     with col_tit:
                         st.markdown(f"### 📅 {dia_semana_rot} - {cat_rot}")
                     with col_del:
-                        btn_delete = st.button("🗑️", key=f"btn_del_rot_{id0_rot}_{r_idx}", help="Excluir esta rotina")
+                        if st.button("🗑️", key=f"btn_del_rot_{id_sp_val}_{idx_r}", help="Excluir esta rotina"):
+                            st.session_state[f"confirm_delete_{id_sp_val}"] = True
+                            st.rerun()
 
-                    if btn_delete:
-                        st.session_state[f"confirm_delete_{id0_rot}_{r_idx}"] = True
-
-                    if st.session_state.get(f"confirm_delete_{id0_rot}_{r_idx}", False):
-                        st.warning("Tem certeza que deseja excluir esta rotina do sistema?")
+                    # Caixa de confirmação de exclusão
+                    if st.session_state.get(f"confirm_delete_{id_sp_val}", False):
+                        st.warning("⚠️ Deseja excluir esta rotina permanentemente do Microsoft Lists?")
                         col_c1, col_c2 = st.columns(2)
+                        
                         with col_c1:
-                            if st.button("Sim, Excluir", key=f"sim_del_{id0_rot}_{r_idx}", type="primary"):
+                            if st.button("Sim, Excluir", key=f"sim_del_{id_sp_val}_{idx_r}", type="primary"):
+                                # Garante parsing numérico se o ID for o autoincremento do SharePoint
+                                try:
+                                    parsed_id = int(id_sp_val)
+                                except ValueError:
+                                    parsed_id = id_sp_val
+
                                 payload_excluir = {
-                                    "id0": id0_rot,
-                                    "id": sp_id_rot,
-                                    "ID": sp_id_rot
+                                    "ID": parsed_id,
+                                    "id": id_sp_val,
+                                    "id0": id0_rot
                                 }
                                 
+                                erro_requisicao = False
                                 if WEBHOOK_ROTINAS_EXCLUIR:
                                     try:
-                                        with st.spinner("Removendo do Microsoft Lists..."):
+                                        with st.spinner("Excluindo no Microsoft Lists..."):
                                             res_del = requests.post(WEBHOOK_ROTINAS_EXCLUIR, json=payload_excluir, timeout=12)
                                             if res_del.status_code not in [200, 202, 204]:
                                                 st.error(f"Erro no Power Automate ({res_del.status_code}): {res_del.text}")
+                                                erro_requisicao = True
                                     except Exception as e:
                                         st.error(f"Erro ao excluir no SharePoint: {e}")
+                                        erro_requisicao = True
                                 else:
-                                    st.warning("URL 'POWER_AUTOMATE_ROTINAS_EXCLUIR_URL' não configurada.")
+                                    st.error("URL 'POWER_AUTOMATE_ROTINAS_EXCLUIR_URL' não encontrada nos secrets.")
+                                    erro_requisicao = True
 
-                                st.session_state["rotinas_excluidas"].add(id0_rot)
-                                st.session_state["rotinas_excluidas"].add(sp_id_rot)
+                                if not erro_requisicao:
+                                    # Adiciona aos excluídos locais
+                                    st.session_state["rotinas_excluidas"].add(str(id_sp_val))
+                                    st.session_state["rotinas_excluidas"].add(str(id0_rot))
 
-                                if "rotinas_local" in st.session_state and not st.session_state["rotinas_local"].empty:
-                                    if "id0" in st.session_state["rotinas_local"].columns:
-                                        st.session_state["rotinas_local"] = st.session_state["rotinas_local"][
-                                            st.session_state["rotinas_local"]["id0"].astype(str) != id0_rot
-                                        ]
-                                    if "id" in st.session_state["rotinas_local"].columns:
-                                        st.session_state["rotinas_local"] = st.session_state["rotinas_local"][
-                                            st.session_state["rotinas_local"]["id"].astype(str) != sp_id_rot
-                                        ]
+                                    # Limpa do DataFrame local de sessão
+                                    if "rotinas_local" in st.session_state and not st.session_state["rotinas_local"].empty:
+                                        for c_check in ["id", "ID", "id0"]:
+                                            if c_check in st.session_state["rotinas_local"].columns:
+                                                st.session_state["rotinas_local"] = st.session_state["rotinas_local"][
+                                                    st.session_state["rotinas_local"][c_check].astype(str) != str(id_sp_val)
+                                                ]
 
-                                st.cache_data.clear()
-                                st.session_state.pop(f"confirm_delete_{id0_rot}_{r_idx}", None)
-                                st.toast("Rotina excluída com sucesso!", icon="🗑️")
-                                st.rerun()
+                                    st.session_state.pop(f"confirm_delete_{id_sp_val}", None)
+                                    st.cache_data.clear()
+                                    st.toast("Rotina excluída com sucesso!", icon="🗑️")
+                                    st.rerun()
 
                         with col_c2:
-                            if st.button("Cancelar", key=f"cancel_del_{id0_rot}_{r_idx}"):
-                                st.session_state[f"confirm_delete_{id0_rot}_{r_idx}"] = False
+                            if st.button("Cancelar", key=f"cancel_del_{id_sp_val}_{idx_r}"):
+                                st.session_state.pop(f"confirm_delete_{id_sp_val}", None)
                                 st.rerun()
 
                     st.write(f"👤 **Responsável pela Rotina:** {nome_resp}")
@@ -566,7 +585,7 @@ with aba4:
         m1, m2, m3 = st.columns(3)
         total_regs = len(df_dados)
 
-        col_st = next((c for c in df_dados.columns if "status" in c), None)
+        col_st = next((c for c in df_dados.columns if "status" in c.lower()), None)
         if col_st:
             pendentes_cnt = len(df_dados[df_dados[col_st].astype(str).str.lower().str.contains("pendente")])
             resolvidos_cnt = len(df_dados[df_dados[col_st].astype(str).str.lower().str.contains("resolvido|finalizado")])
@@ -583,7 +602,7 @@ with aba4:
         col_chart1, col_chart2 = st.columns(2)
         with col_chart1:
             st.markdown("#### Inspeções por Categoria")
-            col_cat = next((c for c in df_dados.columns if "categoria" in c), None)
+            col_cat = next((c for c in df_dados.columns if "categoria" in c.lower()), None)
             if col_cat:
                 cat_counts = df_dados[col_cat].value_counts()
                 st.bar_chart(cat_counts)
@@ -592,7 +611,7 @@ with aba4:
 
         with col_chart2:
             st.markdown("#### Inspeções por Auditor")
-            col_aud = next((c for c in df_dados.columns if "auditor" in c or "responsavel" in c), None)
+            col_aud = next((c for c in df_dados.columns if "auditor" in c.lower() or "responsavel" in c.lower()), None)
             if col_aud:
                 aud_counts = df_dados[col_aud].value_counts()
                 st.bar_chart(aud_counts)
