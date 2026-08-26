@@ -34,7 +34,9 @@ WEBHOOK_ROTINAS_LER = st.secrets.get(
     "POWER_AUTOMATE_ROTINAS_LER_URL",
     "https://defaultcd14821755e24b4e86f837f80bf5ae.f3.environment.api.powerplatform.com:443/powerautomate/automations/direct/cu/09/workflows/4c0c6254cf6a451f8b3180c48f3a8343/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=2E_zEeQwzxqgnFviwSiv3Q8xdbbpqKJM0odK2N9pKvE",
 )
-WEBHOOK_ROTINAS_EXCLUIR = st.secrets.get("POWER_AUTOMATE_ROTINAS_EXCLUIR_URL", "https://defaultcd14821755e24b4e86f837f80bf5ae.f3.environment.api.powerplatform.com:443/powerautomate/automations/direct/cu/17/workflows/fc5c58c8f88f41a4aef0bed4e3a90d6e/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=naGDxbqgt9BRHgMszDYJTPpNDqO7gbXxUCxjIn2bzmQ")
+WEBHOOK_ROTINAS_EXCLUIR = st.secrets.get(
+    "POWER_AUTOMATE_ROTINAS_EXCLUIR_URL",
+    "https://defaultcd14821755e24b4e86f837f80bf5ae.f3.environment.api.powerplatform.com:443/powerautomate/automations/direct/cu/17/workflows/fc5c58c8f88f41a4aef0bed4e3a90d6e/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=naGDxbqgt9BRHgMszDYJTPpNDqO7gbXxUCxjIn2bzmQ")
 
 # --- 3. LISTAS FIXAS ---
 EMAILS_CORPORATIVOS = sorted(
