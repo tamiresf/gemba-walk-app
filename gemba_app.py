@@ -150,7 +150,6 @@ with st.sidebar:
     st.divider()
     st.markdown("### 🧪 Diagnóstico de Webhook")
     
-    # Botão para testar o envio para o Power Automate diretamente
     if st.button("🚀 Testar Fluxo de E-mail", use_container_width=True):
         if not WEBHOOK_ROTINAS_LER:
             st.error("URL de webhook não configurada.")
@@ -431,22 +430,15 @@ with aba3:
         semana_atual = datetime.now().isocalendar()[1]
         ano_atual = datetime.now().year
 
-        def obter_valor_coluna(row, palavras_chave, padrao="N/A"):
-            for col in row.index:
-                if any(p in str(col).lower() for p in palavras_chave):
-                    val = row.get(col)
-                    if pd.notna(val) and str(val).strip() != "":
-                        return str(val)
-            return padrao
-
         cols_r = st.columns(2)
         for idx_r, (r_idx, row_r) in enumerate(df_rot_exibir.iterrows()):
-            nome_resp = obter_valor_coluna(row_r, ["nome", "responsavel", "auditor", "title"])
-            email_resp = obter_valor_coluna(row_r, ["email", "e-mail", "mail"], padrao="")
-            dia_semana_rot = obter_valor_coluna(row_r, ["dia", "semana"])
-            cat_rot = obter_valor_coluna(row_r, ["categoria", "cat"])
-            estacao_rot = obter_valor_coluna(row_r, ["estacao", "setor", "area", "local"])
-            instrucoes_rot = obter_valor_coluna(row_r, ["instrucoes", "obs", "objetivo"], padrao="")
+            # Acesso direto utilizando os nomes exatos das colunas do SharePoint/Lists
+            nome_resp = str(row_r.get("responsavel_nome", "N/A"))
+            email_resp = str(row_r.get("responsavel_email", "Não informado"))
+            dia_semana_rot = str(row_r.get("dia_semana", "N/A"))
+            cat_rot = str(row_r.get("categoria", "N/A"))
+            estacao_rot = str(row_r.get("estacao", "N/A"))
+            instrucoes_rot = str(row_r.get("instrucoes", ""))
 
             executou_semana = False
             if not df_dados.empty:
@@ -456,7 +448,7 @@ with aba3:
                 if col_auditor and col_data:
                     datas_convertidas = pd.to_datetime(df_dados[col_data], errors="coerce")
                     filtro = (
-                        (df_dados[col_auditor].astype(str).str.strip().str.lower() == str(nome_resp).strip().lower())
+                        (df_dados[col_auditor].astype(str).str.strip().str.lower() == nome_resp.strip().lower())
                         & (datas_convertidas.dt.isocalendar().week == semana_atual)
                         & (datas_convertidas.dt.year == ano_atual)
                     )
@@ -465,10 +457,14 @@ with aba3:
             with cols_r[idx_r % 2]:
                 with st.container(border=True):
                     st.markdown(f"### 📅 {dia_semana_rot} - {cat_rot}")
-                    st.caption(f"**Responsável:** {nome_resp} ({email_resp})")
-                    st.write(f"**Área / Estação:** {estacao_rot}")
-                    if instrucoes_rot and instrucoes_rot != "N/A":
-                        st.write(f"**Instruções:** {instrucoes_rot}")
+                    st.write(f"👤 **Responsável pela Rotina:** {nome_resp}")
+                    st.write(f"📧 **E-mail para Notificação:** {email_resp}")
+                    st.write(f"🏢 **Setor / Área a ser Inspecionada:** {estacao_rot}")
+                    st.write(f"📆 **Dia da Semana Fixo:** {dia_semana_rot}")
+                    st.write(f"🏷️ **Categoria da Inspeção:** {cat_rot}")
+                    
+                    if instrucoes_rot and instrucoes_rot.strip() != "" and instrucoes_rot.upper() != "NONE":
+                        st.caption(f"📝 **Instruções:** {instrucoes_rot}")
 
                     if executou_semana:
                         st.success("✅ Rotina Realizada esta Semana!")
