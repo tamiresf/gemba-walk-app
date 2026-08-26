@@ -36,7 +36,8 @@ WEBHOOK_ROTINAS_LER = st.secrets.get(
 )
 WEBHOOK_ROTINAS_EXCLUIR = st.secrets.get(
     "POWER_AUTOMATE_ROTINAS_EXCLUIR_URL",
-    "https://defaultcd14821755e24b4e86f837f80bf5ae.f3.environment.api.powerplatform.com:443/powerautomate/automations/direct/cu/17/workflows/fc5c58c8f88f41a4aef0bed4e3a90d6e/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=naGDxbqgt9BRHgMszDYJTPpNDqO7gbXxUCxjIn2bzmQ")
+    "https://defaultcd14821755e24b4e86f837f80bf5ae.f3.environment.api.powerplatform.com:443/powerautomate/automations/direct/cu/17/workflows/fc5c58c8f88f41a4aef0bed4e3a90d6e/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=naGDxbqgt9BRHgMszDYJTPpNDqO7gbXxUCxjIn2bzmQ",
+)
 
 # --- 3. LISTAS FIXAS ---
 EMAILS_CORPORATIVOS = sorted(
@@ -462,7 +463,6 @@ with aba3:
 
         cols_r = st.columns(2)
         for idx_r, (r_idx, row_r) in enumerate(df_rot_exibir.iterrows()):
-            # Captura unificada dos IDs para suportar colunas personalizadas e nativas do SharePoint
             id0_rot = str(row_r.get("id0", row_r.get("id", str(r_idx))))
             sp_id_rot = str(row_r.get("id", row_r.get("ID", id0_rot)))
 
@@ -498,7 +498,6 @@ with aba3:
                     if btn_delete:
                         st.session_state[f"confirm_delete_{id0_rot}_{r_idx}"] = True
 
-                    # Confirmação de exclusão dentro do card
                     if st.session_state.get(f"confirm_delete_{id0_rot}_{r_idx}", False):
                         st.warning("Tem certeza que deseja excluir esta rotina do sistema?")
                         col_c1, col_c2 = st.columns(2)
@@ -510,7 +509,6 @@ with aba3:
                                     "ID": sp_id_rot
                                 }
                                 
-                                # 1. Enviar requisição para o Webhook/Power Automate excluir do Microsoft Lists
                                 if WEBHOOK_ROTINAS_EXCLUIR:
                                     try:
                                         with st.spinner("Removendo do Microsoft Lists..."):
@@ -522,11 +520,9 @@ with aba3:
                                 else:
                                     st.warning("URL 'POWER_AUTOMATE_ROTINAS_EXCLUIR_URL' não configurada.")
 
-                                # 2. Registrar ID excluído na sessão para ocultar imediatamente na tela
                                 st.session_state["rotinas_excluidas"].add(id0_rot)
                                 st.session_state["rotinas_excluidas"].add(sp_id_rot)
 
-                                # 3. Excluir do estado 'rotinas_local' se existir
                                 if "rotinas_local" in st.session_state and not st.session_state["rotinas_local"].empty:
                                     if "id0" in st.session_state["rotinas_local"].columns:
                                         st.session_state["rotinas_local"] = st.session_state["rotinas_local"][
@@ -537,7 +533,6 @@ with aba3:
                                             st.session_state["rotinas_local"]["id"].astype(str) != sp_id_rot
                                         ]
 
-                                # Clear cache e limpa o flag de confirmação
                                 st.cache_data.clear()
                                 st.session_state.pop(f"confirm_delete_{id0_rot}_{r_idx}", None)
                                 st.toast("Rotina excluída com sucesso!", icon="🗑️")
