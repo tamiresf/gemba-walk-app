@@ -150,22 +150,26 @@ with st.sidebar:
 
     st.divider()
     st.markdown("### 🧪 Diagnóstico de Webhook")
-    
+
     if st.button("🚀 Testar Fluxo de E-mail", use_container_width=True):
         if not WEBHOOK_ROTINAS_LER:
             st.error("URL de webhook não configurada.")
         else:
             payload_teste = {
                 "origem": "Teste via Streamlit App",
-                "data_hora_teste": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                "data_hora_teste": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             }
             try:
                 with st.spinner("Disparando requisição ao Power Automate..."):
-                    res_teste = requests.post(WEBHOOK_ROTINAS_LER, json=payload_teste, timeout=10)
+                    res_teste = requests.post(
+                        WEBHOOK_ROTINAS_LER, json=payload_teste, timeout=10
+                    )
                     if res_teste.status_code in [200, 202]:
                         st.success(f"✅ Executado! Status: {res_teste.status_code}")
                     else:
-                        st.error(f"⚠️ Erro {res_teste.status_code}: {res_teste.text}")
+                        st.error(
+                            f"⚠️ Erro {res_teste.status_code}: {res_teste.text}"
+                        )
             except Exception as e:
                 st.error(f"❌ Falha de conexão: {e}")
 
@@ -184,15 +188,25 @@ if "rotinas_excluidas" not in st.session_state:
 
 # Combina remoto + local
 if "rotinas_local" in st.session_state and not st.session_state["rotinas_local"].empty:
-    df_rotinas = pd.concat([df_rotinas_remoto, st.session_state["rotinas_local"]], ignore_index=True)
+    df_rotinas = pd.concat(
+        [df_rotinas_remoto, st.session_state["rotinas_local"]], ignore_index=True
+    )
 else:
     df_rotinas = df_rotinas_remoto.copy()
 
 # Filtra rotinas excluídas localmente antes de renderizar
 if not df_rotinas.empty:
-    col_id_ref = "id0" if "id0" in df_rotinas.columns else ("id" if "id" in df_rotinas.columns else None)
+    col_id_ref = (
+        "id0"
+        if "id0" in df_rotinas.columns
+        else ("id" if "id" in df_rotinas.columns else None)
+    )
     if col_id_ref:
-        df_rotinas = df_rotinas[~df_rotinas[col_id_ref].astype(str).isin(st.session_state["rotinas_excluidas"])]
+        df_rotinas = df_rotinas[
+            ~df_rotinas[col_id_ref]
+            .astype(str)
+            .isin(st.session_state["rotinas_excluidas"])
+        ]
 
 # Identificar a coluna de status
 col_status = next((c for c in df_dados.columns if "status" in c), None) if not df_dados.empty else None
