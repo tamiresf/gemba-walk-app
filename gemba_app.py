@@ -137,7 +137,6 @@ def buscar_dados_servidor(url_webhook):
                     df = pd.DataFrame([dados_json])
 
             if not df.empty:
-                # Mantém colunas originais e gera versão normalizada
                 df.columns = [str(c).strip() for c in df.columns]
             return df
         return pd.DataFrame()
@@ -468,7 +467,7 @@ with aba3:
                 if col_k in row_r and pd.notna(row_r[col_k]):
                     id_sp_val = str(row_r[col_k])
                     break
-            
+
             if not id_sp_val:
                 id_sp_val = str(r_idx)
 
@@ -509,10 +508,9 @@ with aba3:
                     if st.session_state.get(f"confirm_delete_{id_sp_val}", False):
                         st.warning("⚠️ Deseja excluir esta rotina permanentemente do Microsoft Lists?")
                         col_c1, col_c2 = st.columns(2)
-                        
+
                         with col_c1:
                             if st.button("Sim, Excluir", key=f"sim_del_{id_sp_val}_{idx_r}", type="primary"):
-                                # Garante parsing numérico se o ID for o autoincremento do SharePoint
                                 try:
                                     parsed_id = int(id_sp_val)
                                 except ValueError:
@@ -521,9 +519,9 @@ with aba3:
                                 payload_excluir = {
                                     "ID": parsed_id,
                                     "id": id_sp_val,
-                                    "id0": id0_rot
+                                    "id0": id0_rot,
                                 }
-                                
+
                                 erro_requisicao = False
                                 if WEBHOOK_ROTINAS_EXCLUIR:
                                     try:
@@ -540,11 +538,9 @@ with aba3:
                                     erro_requisicao = True
 
                                 if not erro_requisicao:
-                                    # Adiciona aos excluídos locais
                                     st.session_state["rotinas_excluidas"].add(str(id_sp_val))
                                     st.session_state["rotinas_excluidas"].add(str(id0_rot))
 
-                                    # Limpa do DataFrame local de sessão
                                     if "rotinas_local" in st.session_state and not st.session_state["rotinas_local"].empty:
                                         for c_check in ["id", "ID", "id0"]:
                                             if c_check in st.session_state["rotinas_local"].columns:
@@ -567,7 +563,7 @@ with aba3:
                     st.write(f"🏢 **Setor / Área a ser Inspecionada:** {estacao_rot}")
                     st.write(f"📆 **Dia da Semana Fixo:** {dia_semana_rot}")
                     st.write(f"🏷️ **Categoria da Inspeção:** {cat_rot}")
-                    
+
                     if instrucoes_rot and instrucoes_rot.strip() != "" and instrucoes_rot.upper() != "NONE":
                         st.caption(f"📝 **Instruções:** {instrucoes_rot}")
 
