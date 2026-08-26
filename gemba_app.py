@@ -438,59 +438,78 @@ with aba3:
                         & (datas_convertidas.dt.isocalendar().week == semana_atual)
                         & (datas_convertidas.dt.year == ano_atual)
                     )
-                    executou_semana = filtro.any()
+                    executou_semana = df_dados[filtro].shape[0] > 0
 
             with cols_r[idx_r % 2]:
                 with st.container(border=True):
-                    st.markdown(f"### 📅 {dia_semana_rot} - {cat_rot}")
-                    st.caption(f"**Responsável:** {nome_resp} ({email_resp})")
-                    st.write(f"**Área / Estação:** {estacao_rot}")
+                    st.markdown(f"### 📅 Rotina: {cat_rot}")
+                    st.caption(f"**Área:** {estacao_rot}")
+                    st.write(f"👤 **Responsável:** {nome_resp}")
+                    if email_resp:
+                        st.caption(f"📧 {email_resp}")
+                    st.write(f"🗓️ **Frequência:** Toda {dia_semana_rot}")
                     if instrucoes_rot and instrucoes_rot != "N/A":
-                        st.write(f"**Instruções:** {instrucoes_rot}")
+                        st.info(f"📝 {instrucoes_rot}")
 
                     if executou_semana:
-                        st.success("✅ Rotina Realizada esta Semana!")
+                        st.success("✅ Concluída nesta semana!")
                     else:
-                        st.warning("⚠️ Pendente de Realização esta Semana")
+                        st.warning("⏳ Pendente nesta semana")
 
 # --- ABA 4: DASHBOARD ---
 with aba4:
-    st.subheader("📊 Métricas e Desempenho do Gemba Walk")
+    st.subheader("📊 Visão Geral dos Indicadores")
+
     if df_dados.empty:
-        st.info("Sem dados suficientes para exibir métricas no momento.")
+        st.info("Nenhum dado cadastrado para exibição dos gráficos.")
     else:
-        m1, m2, m3 = st.columns(3)
-        total_regs = len(df_dados)
+        # Métricas Globais
+        total_registros = len(df_dados)
+        col_st = next((c for c in df_dados.columns if "status_inspecao" in c or "status" in c), None)
 
-        col_st = next((c for c in df_dados.columns if "status" in c), None)
+        n_conformes = 0
+        n_nao_conformes = 0
+
         if col_st:
-            pendentes_cnt = len(df_dados[df_dados[col_st].astype(str).str.lower().str.contains("pendente")])
-            resolvidos_cnt = len(df_dados[df_dados[col_st].astype(str).str.lower().str.contains("resolvido|finalizado")])
+            n_conformes = df_dados[df_dados[col_st].astype(str).str.lower().str.contains("conforme") & 
+                                   ~df_dados[col_st].astype(str).str.lower().str.contains("não conforme")].shape[0]
+            n_nao_conformes = df_dados[df_dados[col_st].astype(str).str.lower().str.contains("não conforme")].shape[0]
+
+        m1, m2, m3 = st.columns(3)
+        m1.metric("Total de Inspeções", total_registros)
+        m2.metric("Conformes", n_conformes)
+        m3.metric("Não Conformes", n_nao_conformes)
+
+        st.markdown("---")
+
+        # 1. Gráfico por Categoria
+        st.subheader("📂 Inspeções por Categoria")
+        col_cat = next((c for c in df_dados.columns if "categoria" in c), None)
+
+        if col_cat:
+            cat_counts = df_dados[col_cat].value_counts()
+            st.bar_chart(cat_counts)
         else:
-            pendentes_cnt = 0
-            resolvidos_cnt = 0
+            st.warning("Coluna de categoria não identificada nos dados.")
 
-        m1.metric("Total de Inspeções", total_regs)
-        m2.metric("Pendências Abertas", pendentes_cnt)
-        m3.metric("Concluídas / Resolvidas", resolvidos_cnt)
-
+        # SEPARADOR ESTÉTICO
         st.divider()
 
-        col_chart1, col_chart2 = st.columns(2)
-        with col_chart1:
-            st.markdown("#### Inspeções por Categoria")
-            col_cat = next((c for c in df_dados.columns if "categoria" in c), None)
-            if col_cat:
-                cat_counts = df_dados[col_cat].value_counts()
-                st.bar_chart(cat_counts)
-            else:
-                st.caption("Coluna de categoria não identificada.")
+        # 2. Gráfico por Auditor com Destaque de Cor
+        st.subheader("👥 Inspeções por Auditor")
+        col_aud = next((c for c in df_dados.columns if "auditor" in c), None)
 
-        with col_chart2:
-            st.markdown("#### Inspeções por Auditor")
-            col_aud = next((c for c in df_dados.columns if "auditor" in c or "responsavel" in c), None)
-            if col_aud:
-                aud_counts = df_dados[col_aud].value_counts()
-                st.bar_chart(aud_counts)
-            else:
-                st.caption("Coluna de auditor não identificada.")
+        if col_aud:
+            aud_counts = df_dados[col_aud].value_counts().reset_index()
+            aud_counts.columns = [col_aud, "quantidade"]
+
+            # Exibição do Gráfico de Auditor com cor em destaque (Teal / Verde Esmeralda)
+            st.bar_chart(
+                aud_counts,
+                x=col_aud,
+                y="quantidade",
+                color="#00A86B",
+                use_container_width=True,
+            )
+        else:
+            st.warning("Coluna de auditor não identificada nos dados.")
