@@ -197,7 +197,13 @@ if "rotinas_local" in st.session_state and not st.session_state["rotinas_local"]
 else:
     df_rotinas = df_rotinas_remoto.copy()
 
-# Filtra rotinas excluídas localmente antes de renderizar (suporta id0_, id0 e id)
+# DEDUPLICAÇÃO DE ROTINAS (Evita a duplicação visual de rotinas recém-criadas)
+if not df_rotinas.empty:
+    col_id_dedup = next((c for c in df_rotinas.columns if c.lower() in ["id0_", "id0", "id", "_x0069_d0"]), None)
+    if col_id_dedup:
+        df_rotinas = df_rotinas.drop_duplicates(subset=[col_id_dedup], keep="last")
+
+# Filtra rotinas excluídas localmente antes de renderizar
 if not df_rotinas.empty:
     col_id_ref = next((c for c in df_rotinas.columns if c.lower() in ["id0_", "id0", "id", "_x0069_d0", "id_1"]), None)
     if col_id_ref:
@@ -437,21 +443,40 @@ with aba3:
                         "data_cadastro": datetime.now().strftime("%Y-%m-%d"),
                     }
 
-                    if "rotinas_local" not in st.session_state:
-                        st.session_state["rotinas_local"] = pd.DataFrame()
-
-                    st.session_state["rotinas_local"] = pd.concat(
-                        [st.session_state["rotinas_local"], pd.DataFrame([payload_rotina])],
-                        ignore_index=True,
-                    )
-
                     if WEBHOOK_ROTINAS_CRIAR:
                         try:
-                            requests.post(WEBHOOK_ROTINAS_CRIAR, json=payload_rotina, timeout=10)
-                            st.success("Rotina agendada com sucesso no sistema!")
+                            with st.spinner("Cadastrando rotina..."):
+                                res_rot = requests.post(WEBHOOK_ROTINAS_CRIAR, json=payload_rotina, timeout=10)
+                                if res_rot.status_code in [200, 202, 502]:
+                                    time.sleep(1)
+                                    st.session_state.pop("rotinas_local", None)
+                                    st.cache_data.clear()
+                                    st.success("Rotina agendada com sucesso no sistema!")
+                                    st.rerun()
+                                else:
+                                    # Caso o webhook dê erro, salva na sessão temporária
+                                    if "rotinas_local" not in st.session_state:
+                                        st.session_state["rotinas_local"] = pd.DataFrame()
+                                    st.session_state["rotinas_local"] = pd.concat(
+                                        [st.session_state["rotinas_local"], pd.DataFrame([payload_rotina])],
+                                        ignore_index=True,
+                                    )
+                                    st.warning("Salvo localmente. O webhook retornou um status inesperado.")
                         except Exception:
+                            if "rotinas_local" not in st.session_state:
+                                st.session_state["rotinas_local"] = pd.DataFrame()
+                            st.session_state["rotinas_local"] = pd.concat(
+                                [st.session_state["rotinas_local"], pd.DataFrame([payload_rotina])],
+                                ignore_index=True,
+                            )
                             st.warning("Salvo localmente. Falha ao conectar ao webhook de rotinas.")
                     else:
+                        if "rotinas_local" not in st.session_state:
+                            st.session_state["rotinas_local"] = pd.DataFrame()
+                        st.session_state["rotinas_local"] = pd.concat(
+                            [st.session_state["rotinas_local"], pd.DataFrame([payload_rotina])],
+                            ignore_index=True,
+                        )
                         st.success("Rotina agendada com sucesso!")
 
                     st.cache_data.clear()
