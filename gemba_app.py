@@ -197,9 +197,9 @@ if "rotinas_local" in st.session_state and not st.session_state["rotinas_local"]
 else:
     df_rotinas = df_rotinas_remoto.copy()
 
-# Filtra rotinas excluídas localmente antes de renderizar
+# Filtra rotinas excluídas localmente antes de renderizar (suporta id0_, id0 e id)
 if not df_rotinas.empty:
-    col_id_ref = next((c for c in df_rotinas.columns if c.lower() in ["id", "id0", "ID", "_x0069_d0", "Id"]), None)
+    col_id_ref = next((c for c in df_rotinas.columns if c.lower() in ["id0_", "id0", "id", "_x0069_d0", "id_1"]), None)
     if col_id_ref:
         df_rotinas = df_rotinas[
             ~df_rotinas[col_id_ref]
@@ -214,7 +214,7 @@ if not df_dados.empty and col_status:
     df_dados["status_clean"] = df_dados[col_status].fillna("").astype(str).str.strip().str.lower()
 
 # Identificar colunas de ID
-col_id0 = next((c for c in df_dados.columns if c.lower() == "id0"), None) if not df_dados.empty else None
+col_id0 = next((c for c in df_dados.columns if c.lower() in ["id0_", "id0"]), None) if not df_dados.empty else None
 col_sp_id = next((c for c in df_dados.columns if c.lower() in ["id", "id_unico", "title"]), None) if not df_dados.empty else None
 
 # --- 6. INTERFACE PRINCIPAL ---
@@ -292,6 +292,7 @@ with aba1:
             id_unico = str(uuid.uuid4())[:8]
 
             payload = {
+                "id0_": str(id_unico),
                 "id0": str(id_unico),
                 "id": str(id_unico),
                 "auditor": str(auditor),
@@ -364,6 +365,7 @@ with aba2:
                                 st.error("URL de resolução não configurada.")
                             else:
                                 payload_sol = {
+                                    "id0_": val_id0 if val_id0 else val_sp_id,
                                     "id0": val_id0 if val_id0 else val_sp_id,
                                     "id": val_sp_id,
                                     "ID": val_sp_id,
@@ -416,6 +418,7 @@ with aba3:
                 else:
                     id_rotina = str(uuid.uuid4())[:8]
                     payload_rotina = {
+                        "id0_": id_rotina,
                         "id0": id_rotina,
                         "id": id_rotina,
                         "ID": id_rotina,
@@ -461,8 +464,9 @@ with aba3:
 
         cols_r = st.columns(2)
         for idx_r, (r_idx, row_r) in enumerate(df_rot_exibir.iterrows()):
+            # Procura pelo ID nativo do SharePoint/Lists
             id_sp_val = None
-            for col_k in ["ID", "id", "Id", "id0"]:
+            for col_k in ["ID", "id", "Id"]:
                 if col_k in row_r and pd.notna(row_r[col_k]):
                     id_sp_val = str(row_r[col_k])
                     break
@@ -470,7 +474,15 @@ with aba3:
             if not id_sp_val:
                 id_sp_val = str(r_idx)
 
-            id0_rot = str(row_r.get("id0", id_sp_val))
+            # Procura pelo ID customizado id0_ / id0
+            id0_rot = None
+            for col_k in ["id0_", "id0", "ID0_", "ID0"]:
+                if col_k in row_r and pd.notna(row_r[col_k]):
+                    id0_rot = str(row_r[col_k])
+                    break
+
+            if not id0_rot:
+                id0_rot = id_sp_val
 
             nome_resp = str(row_r.get("responsavel_nome", row_r.get("responsavel", "N/A")))
             email_resp = str(row_r.get("responsavel_email", "Não informado"))
@@ -509,14 +521,15 @@ with aba3:
 
                         with col_c1:
                             if st.button("Sim, Excluir", key=f"sim_del_{id_sp_val}_{idx_r}", type="primary"):
-                                # Garante envio do ID nativo da lista como inteiro
                                 try:
                                     parsed_id = int(id_sp_val)
                                 except (ValueError, TypeError):
                                     parsed_id = id_sp_val
 
+                                # Payload ajustado para a nova coluna id0_
                                 payload_excluir = {
                                     "ID": parsed_id,
+                                    "id0_": str(id0_rot),
                                     "id0": str(id0_rot),
                                 }
 
