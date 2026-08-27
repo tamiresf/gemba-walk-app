@@ -314,7 +314,7 @@ with st.sidebar:
 
         if not WEBHOOK_ROTINAS_LER:
 
-            st.error("URL de webhook não configurada.")
+            st.error("https://defaultcd14821755e24b4e86f837f80bf5ae.f3.environment.api.powerplatform.com:443/powerautomate/automations/direct/cu/09/workflows/4c0c6254cf6a451f8b3180c48f3a8343/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=2E_zEeQwzxqgnFviwSiv3Q8xdbbpqKJM0odK2N9pKvE")
 
         else:
 
