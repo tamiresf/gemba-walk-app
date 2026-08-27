@@ -219,7 +219,13 @@ col_sp_id = next((c for c in df_dados.columns if c.lower() in ["id", "id_unico",
 
 # --- 6. INTERFACE PRINCIPAL ---
 st.title("🔍 Gemba Walk Digital")
-aba1, aba2, aba3, aba4 = st.tabs(["📋 Novo Registro", "📌 Quadro de Post-its", "📅 Rotinas", "📊 Dashboard"])
+aba1, aba2, aba3, aba4, aba5 = st.tabs([
+    "📋 Novo Registro", 
+    "📌 Quadro de Post-its", 
+    "📅 Rotinas", 
+    "🚨 Rotinas Pendentes", 
+    "📊 Dashboard"
+])
 
 # --- ABA 1: NOVO REGISTRO ---
 with aba1:
@@ -526,7 +532,6 @@ with aba3:
                                 except (ValueError, TypeError):
                                     parsed_id = id_sp_val
 
-                                # Payload com os identificadores
                                 payload_excluir = {
                                     "ID": parsed_id,
                                     "id0_": str(id0_rot),
@@ -538,20 +543,15 @@ with aba3:
                                         with st.spinner("Excluindo no Microsoft Lists..."):
                                             res_del = requests.post(WEBHOOK_ROTINAS_EXCLUIR, json=payload_excluir, timeout=15)
                                             
-                                            # Tratamos status 200, 202, 204 E 502 (quando o Power Automate executa sem ação de Response)
                                             if res_del.status_code in [200, 202, 204, 502]:
-                                                # Adiciona aos excluídos da sessão para atualizar a tela imediatamente
                                                 st.session_state["rotinas_excluidas"].add(str(id_sp_val))
                                                 st.session_state["rotinas_excluidas"].add(str(id0_rot))
-
-                                                # Limpa o cache para forçar a atualização dos dados
                                                 st.cache_data.clear()
                                                 st.toast("Rotina excluída com sucesso!", icon="🗑️")
                                                 st.rerun()
                                             else:
                                                 st.error(f"Erro no Power Automate ({res_del.status_code}): {res_del.text}")
                                     except requests.exceptions.Timeout:
-                                        # Caso ocorra timeout, também assumimos que foi processado
                                         st.session_state["rotinas_excluidas"].add(str(id_sp_val))
                                         st.session_state["rotinas_excluidas"].add(str(id0_rot))
                                         st.cache_data.clear()
@@ -581,8 +581,126 @@ with aba3:
                     else:
                         st.warning("⚠️ Pendente de Realização esta Semana")
 
-# --- ABA 4: DASHBOARD ---
+# --- ABA 4: ROTINAS PENDENTES ---
 with aba4:
+    st.subheader("🚨 Rotinas Pendentes (Hoje)")
+
+    # Descobrir o dia da semana atual
+    dias_pt = [
+        "Segunda-feira",
+        "Terça-feira",
+        "Quarta-feira",
+        "Quinta-feira",
+        "Sexta-feira",
+        "Sábado",
+        "Domingo",
+    ]
+    hoje_idx = datetime.now().weekday()
+    hoje_str = dias_pt[hoje_idx]
+    hoje_date = datetime.now().date()
+
+    st.write(f"**Dia de hoje:** {hoje_str} ({hoje_date.strftime('%d/%m/%Y')})")
+    st.info(
+        "💡 Este painel cruza os dados ao vivo: verifica quem está agendado para hoje e se já preencheu o registro. Os pendentes aparecem abaixo."
+    )
+
+    if df_rotinas.empty:
+        st.info("Nenhuma rotina cadastrada no sistema.")
+    else:
+        # Filtra rotinas que caem no dia da semana de hoje
+        rotinas_hoje = df_rotinas[df_rotinas["dia_semana"] == hoje_str]
+
+        if rotinas_hoje.empty:
+            st.success("Nenhuma rotina agendada para hoje!")
+        else:
+            # Prepara os dados de inspeção (Gemba_Walk_Dados) filtrando apenas as de hoje
+            if not df_dados.empty:
+                col_data = next(
+                    (
+                        c
+                        for c in df_dados.columns
+                        if "data" in c.lower() or "created" in c.lower()
+                    ),
+                    None,
+                )
+                if col_data:
+                    # Converte a data do Lists para o formato de data puro (sem hora) para comparar
+                    df_dados["data_date"] = pd.to_datetime(
+                        df_dados[col_data], errors="coerce"
+                    ).dt.date
+                    inspecoes_hoje = df_dados[df_dados["data_date"] == hoje_date]
+                else:
+                    inspecoes_hoje = pd.DataFrame()
+            else:
+                inspecoes_hoje = pd.DataFrame()
+
+            # Verifica quem fez e quem não fez
+            pendentes_hoje = []
+            for _, rotina in rotinas_hoje.iterrows():
+                resp_rotina = (
+                    str(
+                        rotina.get(
+                            "responsavel_nome", rotina.get("responsavel", "")
+                        )
+                    )
+                    .strip()
+                    .lower()
+                )
+
+                realizado = False
+                if not inspecoes_hoje.empty:
+                    # Busca a coluna com o nome do auditor/responsável no registro
+                    col_aud = next(
+                        (
+                            c
+                            for c in inspecoes_hoje.columns
+                            if "auditor" in c.lower() or "responsavel" in c.lower()
+                        ),
+                        None,
+                    )
+                    if col_aud:
+                        # Compara se o responsável da rotina existe nos registros de hoje
+                        filtro = (
+                            inspecoes_hoje[col_aud]
+                            .astype(str)
+                            .str.strip()
+                            .str.lower()
+                            == resp_rotina
+                        )
+                        if filtro.any():
+                            realizado = True
+
+                # Se não realizou, adiciona à lista de pendentes
+                if not realizado:
+                    pendentes_hoje.append(rotina)
+
+            # Exibe o resultado
+            if not pendentes_hoje:
+                st.balloons()
+                st.success("🎉 Todas as rotinas de hoje já foram realizadas!")
+            else:
+                st.warning(
+                    f"⚠️ Há {len(pendentes_hoje)} rotina(s) pendente(s) para hoje."
+                )
+                cols_p = st.columns(2)
+                for idx_p, p in enumerate(pendentes_hoje):
+                    nome_p = p.get("responsavel_nome", p.get("responsavel", "N/A"))
+                    email_p = p.get("responsavel_email", "N/A")
+                    dia_p = p.get("dia_semana", "N/A")
+                    cat_p = p.get("categoria", "N/A")
+                    est_p = p.get("estacao", "N/A")
+
+                    with cols_p[idx_p % 2]:
+                        with st.container(border=True):
+                            st.markdown("#### ⏳ Pendente")
+                            st.write(f"👤 **Responsável pela Rotina:** {nome_p}")
+                            st.write(f"📧 **E-mail para Notificação:** {email_p}")
+                            st.write(f"📆 **Dia da Semana Fixo:** {dia_p}")
+                            st.write(f"🏷️ **Categoria da Inspeção:** {cat_p}")
+                            st.write(f"🏢 **Estação / Área:** {est_p}")
+
+# --- ABA 5: DASHBOARD ---
+with aba5:
     st.subheader("📊 Métricas e Desempenho do Gemba Walk")
     if df_dados.empty:
         st.info("Sem dados suficientes para exibir métricas no momento.")
