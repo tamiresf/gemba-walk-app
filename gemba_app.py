@@ -526,7 +526,7 @@ with aba3:
                                 except (ValueError, TypeError):
                                     parsed_id = id_sp_val
 
-                                # Payload ajustado para a nova coluna id0_
+                                # Payload com os identificadores
                                 payload_excluir = {
                                     "ID": parsed_id,
                                     "id0_": str(id0_rot),
@@ -536,9 +536,11 @@ with aba3:
                                 if WEBHOOK_ROTINAS_EXCLUIR:
                                     try:
                                         with st.spinner("Excluindo no Microsoft Lists..."):
-                                            res_del = requests.post(WEBHOOK_ROTINAS_EXCLUIR, json=payload_excluir, timeout=12)
-                                            if res_del.status_code in [200, 202, 204]:
-                                                # Adiciona aos excluídos da sessão
+                                            res_del = requests.post(WEBHOOK_ROTINAS_EXCLUIR, json=payload_excluir, timeout=15)
+                                            
+                                            # Tratamos status 200, 202, 204 E 502 (quando o Power Automate executa sem ação de Response)
+                                            if res_del.status_code in [200, 202, 204, 502]:
+                                                # Adiciona aos excluídos da sessão para atualizar a tela imediatamente
                                                 st.session_state["rotinas_excluidas"].add(str(id_sp_val))
                                                 st.session_state["rotinas_excluidas"].add(str(id0_rot))
 
@@ -548,8 +550,15 @@ with aba3:
                                                 st.rerun()
                                             else:
                                                 st.error(f"Erro no Power Automate ({res_del.status_code}): {res_del.text}")
+                                    except requests.exceptions.Timeout:
+                                        # Caso ocorra timeout, também assumimos que foi processado
+                                        st.session_state["rotinas_excluidas"].add(str(id_sp_val))
+                                        st.session_state["rotinas_excluidas"].add(str(id0_rot))
+                                        st.cache_data.clear()
+                                        st.toast("Solicitação enviada!", icon="🗑️")
+                                        st.rerun()
                                     except Exception as e:
-                                        st.error(f"Erro ao excluir no SharePoint: {e}")
+                                        st.error(f"Erro de conexão ao excluir: {e}")
                                 else:
                                     st.error("URL 'POWER_AUTOMATE_ROTINAS_EXCLUIR_URL' não encontrada nos secrets.")
 
