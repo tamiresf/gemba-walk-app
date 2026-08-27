@@ -465,9 +465,6 @@ with aba3:
     if df_rot_exibir.empty:
         st.info("Nenhuma rotina cadastrada ainda ou o webhook não retornou dados.")
     else:
-        semana_atual = datetime.now().isocalendar()[1]
-        ano_atual = datetime.now().year
-
         cols_r = st.columns(2)
         for idx_r, (r_idx, row_r) in enumerate(df_rot_exibir.iterrows()):
             # Procura pelo ID nativo do SharePoint/Lists
@@ -496,20 +493,6 @@ with aba3:
             cat_rot = str(row_r.get("categoria", "N/A"))
             estacao_rot = str(row_r.get("estacao", "N/A"))
             instrucoes_rot = str(row_r.get("instrucoes", ""))
-
-            executou_semana = False
-            if not df_dados.empty:
-                col_auditor = next((c for c in df_dados.columns if "auditor" in c.lower() or "responsavel" in c.lower()), None)
-                col_data = next((c for c in df_dados.columns if "data" in c.lower() or "created" in c.lower()), None)
-
-                if col_auditor and col_data:
-                    datas_convertidas = pd.to_datetime(df_dados[col_data], errors="coerce")
-                    filtro = (
-                        (df_dados[col_auditor].astype(str).str.strip().str.lower() == nome_resp.strip().lower())
-                        & (datas_convertidas.dt.isocalendar().week == semana_atual)
-                        & (datas_convertidas.dt.year == ano_atual)
-                    )
-                    executou_semana = filtro.any()
 
             with cols_r[idx_r % 2]:
                 with st.container(border=True):
@@ -575,11 +558,6 @@ with aba3:
 
                     if instrucoes_rot and instrucoes_rot.strip() != "" and instrucoes_rot.upper() != "NONE":
                         st.caption(f"📝 **Instruções:** {instrucoes_rot}")
-
-                    if executou_semana:
-                        st.success("✅ Rotina Realizada esta Semana!")
-                    else:
-                        st.warning("⚠️ Pendente de Realização esta Semana")
 
 # --- ABA 4: ROTINAS PENDENTES ---
 with aba4:
