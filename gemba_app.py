@@ -312,7 +312,7 @@ with aba1:
             }
 
             try:
-                with st.spinner("Enviando registro ao Microsoft Lists..."):
+                with st.spinner("Enviando registro..."):
                     res = requests.post(WEBHOOK_CRIAR, json=payload, timeout=15)
                     if res.status_code in [200, 202, 502]:
                         time.sleep(1.5)
