@@ -277,7 +277,7 @@ with aba1:
             with col_prazo:
                 st.markdown("🚨 **Atenção ao Prazo**")
                 prazo = st.date_input(
-                    "📅 Prazo para Solução**",
+                    "📅 **Prazo para Solução**",
                     value=date.today(),
                 )
         else:
