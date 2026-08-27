@@ -199,7 +199,7 @@ else:
 
 # Filtra rotinas excluídas localmente antes de renderizar
 if not df_rotinas.empty:
-    col_id_ref = next((c for c in df_rotinas.columns if c.lower() in ["id", "id0", "ID", "_x0069_d0"]), None)
+    col_id_ref = next((c for c in df_rotinas.columns if c.lower() in ["id", "id0", "ID", "_x0069_d0", "Id"]), None)
     if col_id_ref:
         df_rotinas = df_rotinas[
             ~df_rotinas[col_id_ref]
