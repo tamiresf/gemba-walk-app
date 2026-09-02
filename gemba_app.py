@@ -197,13 +197,13 @@ if "rotinas_local" in st.session_state and not st.session_state["rotinas_local"]
 else:
     df_rotinas = df_rotinas_remoto.copy()
 
-# DEDUPLICAÇÃO DE ROTINAS (Evita a duplicação visual de rotinas recém-criadas)
+# DEDUPLICAÇÃO DE ROTINAS
 if not df_rotinas.empty:
     col_id_dedup = next((c for c in df_rotinas.columns if c.lower() in ["id0_", "id0", "id", "_x0069_d0"]), None)
     if col_id_dedup:
         df_rotinas = df_rotinas.drop_duplicates(subset=[col_id_dedup], keep="last")
 
-# Filtra rotinas excluídas localmente antes de renderizar
+# Filtra rotinas excluídas localmente
 if not df_rotinas.empty:
     col_id_ref = next((c for c in df_rotinas.columns if c.lower() in ["id0_", "id0", "id", "_x0069_d0", "id_1"]), None)
     if col_id_ref:
@@ -213,8 +213,12 @@ if not df_rotinas.empty:
             .isin(st.session_state["rotinas_excluidas"])
         ]
 
-# Identificar a coluna de status principal e de inspeção
-col_status = next((c for c in df_dados.columns if c.lower() == "status" or "status" in c.lower()), None) if not df_dados.empty else None
+# Identificar estritamente a coluna 'status'
+col_status = next((c for c in df_dados.columns if c.lower() == "status"), None) if not df_dados.empty else None
+
+if not col_status and not df_dados.empty:
+    # Busca alternativa caso a coluna exata 'status' não exista
+    col_status = next((c for c in df_dados.columns if "status" in c.lower()), None)
 
 if not df_dados.empty and col_status:
     df_dados["status_clean"] = df_dados[col_status].fillna("").astype(str).str.strip().str.lower()
@@ -349,10 +353,8 @@ with aba2:
     if df_dados.empty or "status_clean" not in df_dados.columns:
         st.info("Nenhuma pendência encontrada no momento.")
     else:
-        # Exclui tudo que for Conforme, Finalizado ou Resolvido
-        mask_excluir = df_dados["status_clean"].str.contains("finalizado|resolvido|conforme", case=False, na=False)
-        # Mantém apenas os itens pendentes ou não resolvidos
-        pendentes = df_dados[~mask_excluir]
+        # Filtra rigorosamente apenas os registros cujo campo status é 'pendente'
+        pendentes = df_dados[df_dados["status_clean"] == "pendente"]
 
         if pendentes.empty:
             st.success("🎉 Nenhuma pendência aberta no momento!")
@@ -457,7 +459,6 @@ with aba3:
                                     st.success("Rotina agendada com sucesso no sistema!")
                                     st.rerun()
                                 else:
-                                    # Caso o webhook dê erro, salva na sessão temporária
                                     if "rotinas_local" not in st.session_state:
                                         st.session_state["rotinas_local"] = pd.DataFrame()
                                     st.session_state["rotinas_local"] = pd.concat(
@@ -495,7 +496,6 @@ with aba3:
     else:
         cols_r = st.columns(2)
         for idx_r, (r_idx, row_r) in enumerate(df_rot_exibir.iterrows()):
-            # Procura pelo ID nativo do SharePoint/Lists
             id_sp_val = None
             for col_k in ["ID", "id", "Id"]:
                 if col_k in row_r and pd.notna(row_r[col_k]):
@@ -505,7 +505,6 @@ with aba3:
             if not id_sp_val:
                 id_sp_val = str(r_idx)
 
-            # Procura pelo ID customizado id0_ / id0
             id0_rot = None
             for col_k in ["id0_", "id0", "ID0_", "ID0"]:
                 if col_k in row_r and pd.notna(row_r[col_k]):
@@ -591,7 +590,6 @@ with aba3:
 with aba4:
     st.subheader("🚨 Rotinas Pendentes (Hoje)")
 
-    # Descobrir o dia da semana atual
     dias_pt = [
         "Segunda-feira",
         "Terça-feira",
@@ -613,13 +611,11 @@ with aba4:
     if df_rotinas.empty:
         st.info("Nenhuma rotina cadastrada no sistema.")
     else:
-        # Filtra rotinas que caem no dia da semana de hoje
         rotinas_hoje = df_rotinas[df_rotinas["dia_semana"] == hoje_str]
 
         if rotinas_hoje.empty:
             st.success("Nenhuma rotina agendada para hoje!")
         else:
-            # Prepara os dados de inspeção (Gemba_Walk_Dados) filtrando apenas as de hoje
             if not df_dados.empty:
                 col_data = next(
                     (
@@ -630,7 +626,6 @@ with aba4:
                     None,
                 )
                 if col_data:
-                    # Converte a data do Lists para o formato de data puro (sem hora) para comparar
                     df_dados["data_date"] = pd.to_datetime(
                         df_dados[col_data], errors="coerce"
                     ).dt.date
@@ -640,7 +635,6 @@ with aba4:
             else:
                 inspecoes_hoje = pd.DataFrame()
 
-            # Verifica quem fez e quem não fez
             pendentes_hoje = []
             for _, rotina in rotinas_hoje.iterrows():
                 resp_rotina = (
@@ -655,7 +649,6 @@ with aba4:
 
                 realizado = False
                 if not inspecoes_hoje.empty:
-                    # Busca a coluna com o nome do auditor/responsável no registro
                     col_aud = next(
                         (
                             c
@@ -665,7 +658,6 @@ with aba4:
                         None,
                     )
                     if col_aud:
-                        # Compara se o responsável da rotina existe nos registros de hoje
                         filtro = (
                             inspecoes_hoje[col_aud]
                             .astype(str)
@@ -676,11 +668,9 @@ with aba4:
                         if filtro.any():
                             realizado = True
 
-                # Se não realizou, adiciona à lista de pendentes
                 if not realizado:
                     pendentes_hoje.append(rotina)
 
-            # Exibe o resultado
             if not pendentes_hoje:
                 st.balloons()
                 st.success("🎉 Todas as rotinas de hoje já foram realizadas!")
@@ -715,9 +705,8 @@ with aba5:
         total_regs = len(df_dados)
 
         if "status_clean" in df_dados.columns:
-            mask_encerrados = df_dados["status_clean"].str.contains("finalizado|resolvido|conforme", case=False, na=False)
-            pendentes_cnt = len(df_dados[~mask_encerrados])
-            resolvidos_cnt = len(df_dados[mask_encerrados])
+            pendentes_cnt = len(df_dados[df_dados["status_clean"] == "pendente"])
+            resolvidos_cnt = total_regs - pendentes_cnt
         else:
             pendentes_cnt = 0
             resolvidos_cnt = 0
