@@ -349,7 +349,9 @@ with aba2:
     if df_dados.empty or "status_clean" not in df_dados.columns:
         st.info("Nenhuma pendência encontrada no momento.")
     else:
-        pendentes = df_dados[df_dados["status_clean"] == "pendente"]
+        # Filtra registros que contenham 'pendente', 'não conforme' ou 'aberto' no status
+        mask_pendente = df_dados["status_clean"].str.contains("pendente|não conforme|nao conforme|aberto", case=False, na=False)
+        pendentes = df_dados[mask_pendente]
 
         if pendentes.empty:
             st.success("🎉 Nenhuma pendência aberta no momento!")
@@ -713,7 +715,7 @@ with aba5:
 
         col_st = next((c for c in df_dados.columns if "status" in c.lower()), None)
         if col_st:
-            pendentes_cnt = len(df_dados[df_dados[col_st].astype(str).str.lower().str.contains("pendente")])
+            pendentes_cnt = len(df_dados[df_dados[col_st].astype(str).str.lower().str.contains("pendente|não conforme|nao conforme|aberto")])
             resolvidos_cnt = len(df_dados[df_dados[col_st].astype(str).str.lower().str.contains("resolvido|finalizado")])
         else:
             pendentes_cnt = 0
