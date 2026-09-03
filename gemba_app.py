@@ -593,7 +593,7 @@ with aba3:
                     if instrucoes_rot and instrucoes_rot.strip() != "" and instrucoes_rot.upper() != "NONE":
                         st.caption(f"📝 **Instruções:** {instrucoes_rot}")
 
-# --- ABA 4: ROTINAS PENDENTES (ATUALIZADA) ---
+# --- ABA 4: ROTINAS PENDENTES ---
 with aba4:
     st.subheader("🚨 Rotinas Pendentes (Hoje)")
 
@@ -607,7 +607,7 @@ with aba4:
         "Domingo",
     ]
     
-    # Captura a data/hora exata do fuso horário do Brasil
+    # Captura a data e o dia da semana no fuso horário do Brasil (America/Sao_Paulo)
     agora_br = pd.Timestamp.now(tz="America/Sao_Paulo")
     hoje_idx = agora_br.weekday()
     hoje_str = dias_pt[hoje_idx]
@@ -615,8 +615,8 @@ with aba4:
 
     st.write(f"**Dia de hoje:** {hoje_str} ({hoje_date.strftime('%d/%m/%Y')})")
     st.info(
-        "💡 Este painel cruza os dados ao vivo: verifica quem está agendado para hoje, a categoria correspondente "
-        "e se o registro já foi realizado na base de dados (Gemba_Walk_Dados)."
+        "💡 Este painel cruza a data de hoje com os registros da coluna 'data_criacao' no Gemba_Walk_Dados. "
+        "Caso o responsável tenha preenchido a inspeção hoje, a tarefa automaticamente sairá desta aba."
     )
 
     if df_rotinas.empty:
@@ -630,26 +630,35 @@ with aba4:
         if rotinas_hoje.empty:
             st.success("Nenhuma rotina agendada para hoje!")
         else:
-            # 2. Prepara e filtra as inspeções registradas no dia atual (tratando conversão de timezone)
+            # 2. Prepara e filtra as inspeções de hoje olhando para a coluna 'data_criacao'
             inspecoes_hoje = pd.DataFrame()
             if not df_dados.empty:
+                # Busca a coluna data_criacao (ou similares caso haja pequenas variações de nome)
                 col_data = next(
-                    (c for c in df_dados.columns if "data" in c.lower() or "created" in c.lower()),
+                    (c for c in df_dados.columns if c.lower() == "data_criacao"),
                     None,
                 )
+                if not col_data:
+                    col_data = next(
+                        (c for c in df_dados.columns if "data" in c.lower() or "created" in c.lower()),
+                        None,
+                    )
+
                 if col_data:
                     df_dados_copy = df_dados.copy()
                     dt_series = pd.to_datetime(df_dados_copy[col_data], errors="coerce", utc=True)
-                    df_dados_copy["data_date"] = dt_series.dt.tz_convert("America/Sao_Paulo").dt.date
-                    inspecoes_hoje = df_dados_copy[df_dados_copy["data_date"] == hoje_date]
+                    df_dados_copy["data_criacao_date"] = dt_series.dt.tz_convert("America/Sao_Paulo").dt.date
+                    
+                    # Filtra apenas os registros criados HOJE
+                    inspecoes_hoje = df_dados_copy[df_dados_copy["data_criacao_date"] == hoje_date]
 
-            # 3. Mapeamento das colunas de auditor/responsável e categoria
+            # 3. Mapeia colunas de auditor/responsável e categoria
             col_aud = next((c for c in inspecoes_hoje.columns if "auditor" in c.lower() or "responsavel" in c.lower()), None) if not inspecoes_hoje.empty else None
             col_cat = next((c for c in inspecoes_hoje.columns if "categoria" in c.lower() or "cat" in c.lower()), None) if not inspecoes_hoje.empty else None
 
             pendentes_hoje = []
 
-            # 4. Avalia cada rotina do dia cruzando Responsável (Nome OU E-mail) + Categoria
+            # 4. Cruzamento: verifica se existe registro na data_criacao de hoje
             for _, rotina in rotinas_hoje.iterrows():
                 resp_nome_rotina = normalizar_texto(rotina.get("responsavel_nome", rotina.get("responsavel", "")))
                 resp_email_rotina = normalizar_texto(rotina.get("responsavel_email", ""))
@@ -661,17 +670,18 @@ with aba4:
                     auditores_insp = inspecoes_hoje[col_aud].apply(normalizar_texto)
                     categorias_insp = inspecoes_hoje[col_cat].apply(normalizar_texto)
 
-                    # Confere se atende por Nome OU por E-mail corporativo
+                    # Permite validação tanto se o registro salvou o Nome ou o E-mail
                     filtro_resp = (auditores_insp == resp_nome_rotina) | (auditores_insp == resp_email_rotina)
                     filtro_cat = (categorias_insp == cat_rotina_norm)
 
                     if (filtro_resp & filtro_cat).any():
                         realizado = True
 
+                # Se a tarefa ainda NÃO foi realizada hoje, ela entra para a lista de pendentes
                 if not realizado:
                     pendentes_hoje.append(rotina)
 
-            # 5. Exibição das rotinas pendentes
+            # 5. Exibição na tela
             if not pendentes_hoje:
                 st.balloons()
                 st.success("🎉 Todas as rotinas de hoje já foram realizadas!")
