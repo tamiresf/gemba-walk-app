@@ -614,8 +614,7 @@ with aba4:
     hoje_date = agora_br.date()
 
     st.write(f"**Dia de hoje:** {hoje_str} ({hoje_date.strftime('%d/%m/%Y')})")
-    st.info(
-    )
+    
 
     if df_rotinas.empty:
         st.info("Nenhuma rotina cadastrada no sistema.")
