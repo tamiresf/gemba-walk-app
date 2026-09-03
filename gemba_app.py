@@ -605,17 +605,23 @@ with aba4:
 
     st.write(f"**Dia de hoje:** {hoje_str} ({hoje_date.strftime('%d/%m/%Y')})")
     st.info(
-        "💡 Este painel cruza os dados ao vivo: verifica quem está agendado para hoje e se já preencheu o registro. Os pendentes aparecem abaixo."
+        "💡 Este painel cruza os dados ao vivo: verifica quem está agendado para hoje, a categoria correspondente "
+        "e se o registro já foi realizado na base de dados (Gemba_Walk_Dados)."
     )
 
     if df_rotinas.empty:
         st.info("Nenhuma rotina cadastrada no sistema.")
     else:
-        rotinas_hoje = df_rotinas[df_rotinas["dia_semana"] == hoje_str]
+        # 1. Filtra as rotinas programadas para o dia da semana atual
+        rotinas_hoje = df_rotinas[
+            df_rotinas["dia_semana"].astype(str).str.strip().str.lower() == hoje_str.lower()
+        ]
 
         if rotinas_hoje.empty:
             st.success("Nenhuma rotina agendada para hoje!")
         else:
+            # 2. Prepara e filtra os registros de inspeção (df_dados / Gemba_Walk_Dados) realizados hoje
+            inspecoes_hoje = pd.DataFrame()
             if not df_dados.empty:
                 col_data = next(
                     (
@@ -626,51 +632,50 @@ with aba4:
                     None,
                 )
                 if col_data:
-                    df_dados["data_date"] = pd.to_datetime(
-                        df_dados[col_data], errors="coerce"
+                    df_dados_copy = df_dados.copy()
+                    df_dados_copy["data_date"] = pd.to_datetime(
+                        df_dados_copy[col_data], errors="coerce"
                     ).dt.date
-                    inspecoes_hoje = df_dados[df_dados["data_date"] == hoje_date]
-                else:
-                    inspecoes_hoje = pd.DataFrame()
-            else:
-                inspecoes_hoje = pd.DataFrame()
+                    inspecoes_hoje = df_dados_copy[df_dados_copy["data_date"] == hoje_date]
+
+            # 3. Mapeamento de colunas no DataFrame de inspeções (df_dados)
+            col_aud = next(
+                (c for c in inspecoes_hoje.columns if "auditor" in c.lower() or "responsavel" in c.lower()),
+                None,
+            ) if not inspecoes_hoje.empty else None
+
+            col_cat = next(
+                (c for c in inspecoes_hoje.columns if "categoria" in c.lower() or "cat" in c.lower()),
+                None,
+            ) if not inspecoes_hoje.empty else None
 
             pendentes_hoje = []
+
+            # 4. Avalia cada rotina do dia cruzando Responsável + Categoria + Data
             for _, rotina in rotinas_hoje.iterrows():
-                resp_rotina = (
-                    str(
-                        rotina.get(
-                            "responsavel_nome", rotina.get("responsavel", "")
-                        )
-                    )
-                    .strip()
-                    .lower()
-                )
+                resp_rotina = str(
+                    rotina.get("responsavel_nome", rotina.get("responsavel", ""))
+                ).strip().lower()
+
+                cat_rotina = str(rotina.get("categoria", "")).strip().lower()
 
                 realizado = False
-                if not inspecoes_hoje.empty:
-                    col_aud = next(
-                        (
-                            c
-                            for c in inspecoes_hoje.columns
-                            if "auditor" in c.lower() or "responsavel" in c.lower()
-                        ),
-                        None,
+
+                if not inspecoes_hoje.empty and col_aud and col_cat:
+                    filtro_resp = (
+                        inspecoes_hoje[col_aud].astype(str).str.strip().str.lower() == resp_rotina
                     )
-                    if col_aud:
-                        filtro = (
-                            inspecoes_hoje[col_aud]
-                            .astype(str)
-                            .str.strip()
-                            .str.lower()
-                            == resp_rotina
-                        )
-                        if filtro.any():
-                            realizado = True
+                    filtro_cat = (
+                        inspecoes_hoje[col_cat].astype(str).str.strip().str.lower() == cat_rotina
+                    )
+
+                    if (filtro_resp & filtro_cat).any():
+                        realizado = True
 
                 if not realizado:
                     pendentes_hoje.append(rotina)
 
+            # 5. Exibição das rotinas pendentes do dia
             if not pendentes_hoje:
                 st.balloons()
                 st.success("🎉 Todas as rotinas de hoje já foram realizadas!")
