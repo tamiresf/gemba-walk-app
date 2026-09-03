@@ -615,8 +615,6 @@ with aba4:
 
     st.write(f"**Dia de hoje:** {hoje_str} ({hoje_date.strftime('%d/%m/%Y')})")
     st.info(
-        "💡 Este painel cruza a data de hoje com os registros da coluna 'data_criacao' no Gemba_Walk_Dados. "
-        "Caso o responsável tenha preenchido a inspeção hoje, a tarefa automaticamente sairá desta aba."
     )
 
     if df_rotinas.empty:
